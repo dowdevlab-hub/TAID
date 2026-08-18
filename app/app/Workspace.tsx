@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type View = "dashboard" | "capture" | "review" | "knowledge";
 type CardStatus = "승인" | "검토 대기" | "반려";
@@ -93,6 +93,7 @@ interface SpeechRecognitionLike {
   onend: (() => void) | null;
   start: () => void;
   stop: () => void;
+  abort?: () => void;
 }
 
 type RecognitionConstructor = new () => SpeechRecognitionLike;
@@ -235,11 +236,13 @@ export default function Workspace() {
   const [cards, setCards] = useState<KnowledgeCard[]>(initialCards);
   const [captureStage, setCaptureStage] = useState(0);
   const [recording, setRecording] = useState(false);
+  const [finalizingRecording, setFinalizingRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [transcript, setTranscript] = useState("");
   const [processing, setProcessing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [speechNotice, setSpeechNotice] = useState("");
+  const [transcriptReviewRequired, setTranscriptReviewRequired] = useState(false);
   const [structureMeta, setStructureMeta] = useState<StructureMeta | null>(null);
   const [criticalConfirmed, setCriticalConfirmed] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState(initialCards[0].id);
@@ -248,7 +251,49 @@ export default function Workspace() {
   const [answer, setAnswer] = useState("");
   const [toast, setToast] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recognitionBaseTranscriptRef = useRef("");
+  const recognitionFinalizeTimerRef = useRef<number | null>(null);
+  const recordingEndNoticeRef = useRef("");
   const analysisControllerRef = useRef<AbortController | null>(null);
+
+  const finalizeRecording = useCallback((completionNotice: string) => {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      setRecording(false);
+      setFinalizingRecording(false);
+      return;
+    }
+
+    recordingEndNoticeRef.current = completionNotice;
+    setRecording(false);
+    setFinalizingRecording(true);
+    setSpeechNotice("마지막 음성을 문장에 반영하고 있습니다.");
+    if (recognitionFinalizeTimerRef.current !== null) {
+      window.clearTimeout(recognitionFinalizeTimerRef.current);
+      recognitionFinalizeTimerRef.current = null;
+    }
+
+    try {
+      recognition.stop();
+    } catch {
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      setFinalizingRecording(false);
+      setSpeechNotice(completionNotice);
+      return;
+    }
+
+    recognitionFinalizeTimerRef.current = window.setTimeout(() => {
+      if (recognitionRef.current !== recognition) return;
+      recognitionFinalizeTimerRef.current = null;
+      recognitionRef.current = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      setFinalizingRecording(false);
+      setTranscriptReviewRequired(true);
+      setSpeechNotice("음성 종료 확인이 지연되었습니다. 마지막 문장이 빠졌을 수 있으니 전사문을 확인해주세요.");
+    }, 5_000);
+  }, []);
 
   const [draft, setDraft] = useState<DraftRecord>({
     kind: "문제" as KnowledgeCard["kind"],
@@ -281,30 +326,31 @@ export default function Workspace() {
     if (!recording) return;
     const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
     const limit = window.setTimeout(() => {
-      const recognition = recognitionRef.current;
-      recognitionRef.current = null;
-      try {
-        recognition?.stop();
-      } catch {
-        // The recognizer may already have stopped itself.
-      }
       setSeconds(180);
-      setRecording(false);
-      setSpeechNotice("최대 녹음 시간 3분에 도달해 음성 인식을 종료했습니다.");
+      finalizeRecording("최대 녹음 시간 3분에 도달해 종료했습니다. 기존 입력은 보존되며 추가 녹음은 뒤에 이어집니다.");
     }, 180_000);
     return () => {
       window.clearInterval(timer);
       window.clearTimeout(limit);
     };
-  }, [recording]);
+  }, [finalizeRecording, recording]);
 
   useEffect(() => () => {
     analysisControllerRef.current?.abort();
     analysisControllerRef.current = null;
+    if (recognitionFinalizeTimerRef.current !== null) {
+      window.clearTimeout(recognitionFinalizeTimerRef.current);
+    }
     const recognition = recognitionRef.current;
     recognitionRef.current = null;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+    }
     try {
-      recognition?.stop();
+      if (recognition?.abort) recognition.abort();
+      else recognition?.stop();
     } catch {
       // Ignore browser-specific shutdown errors during unmount.
     }
@@ -366,11 +412,13 @@ export default function Workspace() {
   function resetCaptureState(preserveContext = true) {
     stopRecording();
     cancelAnalysis();
+    recognitionBaseTranscriptRef.current = "";
     setCaptureStage(0);
     setSeconds(0);
     setTranscript("");
     setAnalysisError("");
     setSpeechNotice("");
+    setTranscriptReviewRequired(false);
     setStructureMeta(null);
     setCriticalConfirmed(false);
     setDraft((current) => ({
@@ -402,10 +450,12 @@ export default function Workspace() {
   }
 
   function startRecording() {
+    if (finalizingRecording) return;
     stopRecording();
     setAnalysisError("");
     setSpeechNotice("");
     setSeconds(0);
+    recognitionBaseTranscriptRef.current = transcript.trim();
 
     const speechWindow = window as typeof window & {
       SpeechRecognition?: RecognitionConstructor;
@@ -423,29 +473,52 @@ export default function Workspace() {
     recognition.interimResults = true;
     recognition.continuous = true;
     recognition.onresult = (event) => {
+      if (recognitionRef.current !== recognition) return;
       const nextTranscript = Array.from(event.results)
         .map((result) => result[0]?.transcript ?? "")
-        .join(" ");
-      setTranscript(nextTranscript);
+        .join(" ")
+        .trim();
+      setTranscript(
+        [recognitionBaseTranscriptRef.current, nextTranscript]
+          .filter(Boolean)
+          .join("\n"),
+      );
     };
     recognition.onerror = () => {
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      if (recognitionRef.current !== recognition) return;
+      recognitionRef.current = null;
+      if (recognitionFinalizeTimerRef.current !== null) {
+        window.clearTimeout(recognitionFinalizeTimerRef.current);
+        recognitionFinalizeTimerRef.current = null;
+      }
       setSpeechNotice("음성을 인식하지 못했습니다. 마이크 권한과 브라우저 설정을 확인하거나 내용을 직접 입력해 주세요.");
+      setTranscriptReviewRequired(true);
       setRecording(false);
+      setFinalizingRecording(false);
     };
     recognition.onend = () => {
       if (recognitionRef.current === recognition) {
         recognitionRef.current = null;
+        if (recognitionFinalizeTimerRef.current !== null) {
+          window.clearTimeout(recognitionFinalizeTimerRef.current);
+          recognitionFinalizeTimerRef.current = null;
+        }
         setRecording(false);
+        setFinalizingRecording(false);
+        if (recordingEndNoticeRef.current) {
+          setSpeechNotice(recordingEndNoticeRef.current);
+        }
       }
     };
     recognitionRef.current = recognition;
+    recordingEndNoticeRef.current = "";
     try {
       recognition.start();
       setRecording(true);
     } catch {
       recognitionRef.current = null;
       setRecording(false);
+      setFinalizingRecording(false);
       setSpeechNotice("마이크를 시작하지 못했습니다. 브라우저 권한을 확인하거나 내용을 직접 입력해 주세요.");
     }
   }
@@ -453,15 +526,51 @@ export default function Workspace() {
   function stopRecording() {
     const recognition = recognitionRef.current;
     recognitionRef.current = null;
+    recordingEndNoticeRef.current = "";
+    if (recognitionFinalizeTimerRef.current !== null) {
+      window.clearTimeout(recognitionFinalizeTimerRef.current);
+      recognitionFinalizeTimerRef.current = null;
+    }
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+    }
     try {
-      recognition?.stop();
+      if (recognition?.abort) recognition.abort();
+      else recognition?.stop();
     } catch {
       // The recognizer may already have stopped itself.
     }
     setRecording(false);
+    setFinalizingRecording(false);
+  }
+
+  function clearTranscriptForRestart() {
+    if (
+      transcript.trim() &&
+      !window.confirm("현재 입력 내용을 모두 지우고 처음부터 다시 시작할까요?")
+    ) {
+      return;
+    }
+    stopRecording();
+    recognitionBaseTranscriptRef.current = "";
+    setTranscript("");
+    setSeconds(0);
+    setAnalysisError("");
+    setSpeechNotice("기존 입력을 지웠습니다. 녹음 버튼을 눌러 처음부터 시작하세요.");
+    setTranscriptReviewRequired(false);
   }
 
   async function analyzeTranscript() {
+    if (transcriptReviewRequired) {
+      setAnalysisError("전사문을 확인한 뒤 ‘전사문 확인 완료’를 눌러주세요.");
+      return;
+    }
+    if (recording || finalizingRecording) {
+      setAnalysisError("먼저 녹음을 멈추고 마지막 음성이 반영될 때까지 기다려주세요.");
+      return;
+    }
     stopRecording();
     const source = transcript.trim();
     if (!source) {
@@ -572,6 +681,7 @@ export default function Workspace() {
   function continueWithSample() {
     stopRecording();
     cancelAnalysis();
+    setTranscriptReviewRequired(false);
     setDraft((current) => ({
       ...current,
       kind: "문제",
@@ -784,19 +894,21 @@ export default function Workspace() {
                 <p>공정, 설비, 작업·불량 수량, 증상, 조치를 함께 말하면 더 정확하게 정리할 수 있어요.</p>
                 <div className="ai-connection-status"><i aria-hidden="true" />실제 AI 연결 시 구조화</div>
                 <div className="privacy-notice"><b>입력 전 확인</b><span>음성은 브라우저 음성 서비스에서 처리될 수 있습니다. 전사문은 OpenAI에 <code>store:false</code>로 전송되며 이 앱은 원음 파일을 저장하지 않습니다. 저장을 누른 구조화 결과는 이 브라우저의 localStorage에 남습니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</span></div>
-                <div className={`recorder ${recording ? "recording" : ""}`}>
-                  <button type="button" disabled={processing} aria-label={recording ? "녹음 중지" : "녹음 시작"} onClick={recording ? stopRecording : startRecording}><i /><span>{recording ? "멈추기" : "눌러서 말하기"}</span></button>
+                <div className={`recorder ${recording ? "recording" : ""} ${finalizingRecording ? "finalizing" : ""}`}>
+                  <button type="button" disabled={processing || finalizingRecording} aria-label={finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중지" : transcript.trim() ? "기존 내용에 이어 녹음" : "녹음 시작"} onClick={recording ? () => finalizeRecording("녹음을 종료했습니다. 기존 입력은 보존되며 다시 누르면 뒤에 이어집니다.") : startRecording}><i /><span>{finalizingRecording ? "마무리 중" : recording ? "멈추기" : transcript.trim() ? "이어서 말하기" : "눌러서 말하기"}</span></button>
                   <div className="recorder-wave" aria-hidden="true">
                     {[14, 30, 22, 43, 18, 36, 26, 49, 32, 17, 40, 24, 34, 16, 29, 45, 21, 33, 15].map((height, index) => <i key={index} style={{ height: recording ? `${height}px` : "4px", animationDelay: `${index * 45}ms` }} />)}
                   </div>
                   <strong>{String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")}</strong><small>최대 03:00</small>
                 </div>
-                <label className="transcript-field"><span>인식된 내용 <small>직접 수정할 수 있어요</small></span><textarea value={transcript} onChange={(event) => { setTranscript(event.target.value); setAnalysisError(""); setSpeechNotice(""); }} placeholder="음성을 인식하면 여기에 내용이 표시됩니다." /></label>
+                {transcript.trim() && !recording && !finalizingRecording && <p className="transcript-append-note">추가 녹음은 현재 내용 뒤에 새 줄로 이어집니다.</p>}
+                <label className="transcript-field"><span>인식된 내용 <small>{finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중 자동 갱신" : "직접 수정할 수 있어요"}</small></span><textarea readOnly={recording || finalizingRecording} value={transcript} onChange={(event) => { setTranscript(event.target.value); setAnalysisError(""); setSpeechNotice(""); }} placeholder="음성을 인식하면 여기에 내용이 표시됩니다." /></label>
                 <div className="transcript-tools">
                   {speechNotice && <p role="status">{speechNotice}</p>}
-                  <button type="button" disabled={processing} onClick={() => { stopRecording(); setTranscript(demoTranscript); setSpeechNotice("샘플 문장을 불러왔습니다. 실제 음성 인식 결과가 아닙니다."); }}>샘플 문장 불러오기</button>
+                  <div><button type="button" disabled={processing || finalizingRecording} onClick={() => { stopRecording(); recognitionBaseTranscriptRef.current = ""; setTranscriptReviewRequired(false); setTranscript(demoTranscript); setSpeechNotice("샘플 문장을 불러왔습니다. 실제 음성 인식 결과가 아닙니다."); }}>샘플 문장 불러오기</button>{transcript.trim() && <button className="reset-transcript" type="button" disabled={processing || finalizingRecording} onClick={clearTranscriptForRestart}>처음부터 다시</button>}</div>
                 </div>
-                <button className="sample-flow-shortcut" type="button" disabled={processing} onClick={() => { setTranscript(demoTranscript); setSpeechNotice("AI를 사용하지 않는 샘플 흐름입니다."); continueWithSample(); }}><b>AI 없이 샘플 전체 흐름 체험</b><span>키 설정 전에도 검토·저장·승인 흐름을 바로 볼 수 있습니다. →</span></button>
+                {transcriptReviewRequired && <div className="transcript-review-warning" role="alert"><p><b>마지막 문장을 확인해주세요.</b><span>음성 종료가 정상 확인되지 않아 끝부분이 누락됐을 수 있습니다.</span></p><button type="button" onClick={() => { setTranscriptReviewRequired(false); setAnalysisError(""); setSpeechNotice("전사문 확인을 완료했습니다."); }}>전사문 확인 완료</button></div>}
+                <button className="sample-flow-shortcut" type="button" disabled={processing || finalizingRecording} onClick={() => { setTranscript(demoTranscript); setSpeechNotice("AI를 사용하지 않는 샘플 흐름입니다."); continueWithSample(); }}><b>AI 없이 샘플 전체 흐름 체험</b><span>키 설정 전에도 검토·저장·승인 흐름을 바로 볼 수 있습니다. →</span></button>
                 {processing && <div className="analysis-status" role="status">AI가 현장 기록을 분석하고 있습니다. 잠시만 기다려주세요.</div>}
                 {analysisError && (
                   <div className="analysis-error" role="alert">
@@ -804,7 +916,7 @@ export default function Workspace() {
                     <button type="button" onClick={continueWithSample}>샘플 결과로 계속</button>
                   </div>
                 )}
-                <div className="button-row"><button className="ghost-action" type="button" onClick={() => resetCaptureState()}>← 이전</button><button className="wide-primary inline" type="button" disabled={processing || !transcript.trim()} onClick={analyzeTranscript}>{processing ? "AI가 구조화하는 중…" : "AI로 내용 정리"}<span>→</span></button></div>
+                <div className="button-row"><button className="ghost-action" type="button" onClick={() => resetCaptureState()}>← 이전</button><button className="wide-primary inline" type="button" disabled={processing || recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={analyzeTranscript}>{finalizingRecording ? "마지막 음성 반영 중…" : transcriptReviewRequired ? "전사문 확인 필요" : processing ? "AI가 구조화하는 중…" : "AI로 내용 정리"}<span>→</span></button></div>
               </div>
             )}
 
