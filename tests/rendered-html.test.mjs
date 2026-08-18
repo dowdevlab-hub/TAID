@@ -47,6 +47,7 @@ test("server-renders the TAID homepage", async () => {
   assert.match(html, /이 화면 직접 체험하기/);
   assert.match(html, /샘플 체험 바로 시작/);
   assert.match(html, /href="\/app"/);
+  assert.match(html, /data-navigation="document"/);
   assert.match(html, /\/og\.png/);
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/);
 });

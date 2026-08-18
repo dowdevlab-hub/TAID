@@ -10,9 +10,9 @@ export default function Home() {
         <div className="nav-links">
           <a href="#why">문제와 해법</a>
           <a href="#how">작동 방식</a>
-          <Link className="nav-cta" href="/app">
+          <a className="nav-cta" href="/app" data-navigation="document">
             MVP 체험하기 <span aria-hidden="true">↗</span>
-          </Link>
+          </a>
         </div>
       </nav>
 
@@ -29,9 +29,9 @@ export default function Home() {
             중소 제조현장용 AI 지식 운영 서비스.
           </p>
           <div className="hero-actions">
-            <Link className="primary-button" href="/app">
+            <a className="primary-button" href="/app" data-navigation="document">
               3분 기록 시작하기 <span aria-hidden="true">→</span>
-            </Link>
+            </a>
             <a className="text-link" href="#how">어떻게 작동하나요?</a>
           </div>
           <div className="trust-row" aria-label="서비스 핵심 원칙">
@@ -74,7 +74,7 @@ export default function Home() {
               <div><dt>문제</dt><dd>누설 불량 3개</dd></div>
               <div><dt>추정 원인</dt><dd>실링 고무 위치</dd></div>
             </dl>
-            <Link className="preview-cta" href="/app">이 화면 직접 체험하기 <span aria-hidden="true">→</span></Link>
+            <a className="preview-cta" href="/app" data-navigation="document">이 화면 직접 체험하기 <span aria-hidden="true">→</span></a>
           </div>
           <div className="product-caption">
             <span>01</span>
@@ -100,7 +100,7 @@ export default function Home() {
         </div>
         <div className="how-cta">
           <div><span>INTERACTIVE PROTOTYPE</span><b>설명은 여기까지.<br />이제 직접 눌러보세요.</b></div>
-          <Link className="primary-button" href="/app">샘플 체험 바로 시작 <span aria-hidden="true">→</span></Link>
+          <a className="primary-button" href="/app" data-navigation="document">샘플 체험 바로 시작 <span aria-hidden="true">→</span></a>
         </div>
       </section>
 
@@ -109,7 +109,7 @@ export default function Home() {
           <p className="eyebrow"><span /> ONE CLOSED LOOP</p>
           <h2>메모로 끝나지 않고,<br /><em>해결까지 이어집니다.</em></h2>
           <p>음성 인식은 시작일 뿐입니다. TAID는 현장의 말이 담당 업무가 되고, 검증된 해결 경험으로 다시 쓰이는 과정 전체를 설계합니다.</p>
-          <Link className="primary-button light" href="/app">실제 흐름 체험하기 <span>→</span></Link>
+          <a className="primary-button light" href="/app" data-navigation="document">실제 흐름 체험하기 <span>→</span></a>
         </div>
         <div className="loop-flow">
           <article><span>01 · CONTEXT</span><b>설비와 공정을 먼저 확인</b><p>QR 또는 직접 선택으로 말의 맥락을 고정합니다.</p></article>
@@ -162,7 +162,7 @@ export default function Home() {
         <div className="pilot-copy">
           <p>8~10명의 작업자와 함께 실제 소음 환경, 핵심 숫자 정확도, 4주차 참여율, 지식 승인과 재사용을 검증합니다.</p>
           <div><span><b>70%</b>4주차 회고 참여율</span><span><b>85%</b>핵심 필드 완전성</span><span><b>0건</b>중대 신뢰·보안 이슈</span></div>
-          <Link href="/app">MVP 데모 열기 <span>→</span></Link>
+          <a href="/app" data-navigation="document">MVP 데모 열기 <span>→</span></a>
         </div>
       </section>
 
