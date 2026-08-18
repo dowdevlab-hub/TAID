@@ -20,6 +20,7 @@ type KnowledgeCard = {
   createdAt: string;
   status: CardStatus;
   confidence: number;
+  structureMode?: "live" | "sample";
   views: number;
 };
 
@@ -46,6 +47,40 @@ interface SpeechRecognitionLike {
 
 type RecognitionConstructor = new () => SpeechRecognitionLike;
 
+type StructureSuccessResponse = {
+  ok: true;
+  mode: "live";
+  data: {
+    kind: KnowledgeCard["kind"];
+    process: string;
+    equipment: string;
+    quantity: string;
+    defect: string;
+    symptom: string;
+    cause: string;
+    action: string;
+    result: string;
+    confidence: number;
+    needsReview: string[];
+  };
+};
+
+type StructureErrorResponse = {
+  ok?: false;
+  code?: string;
+  error?: string | {
+    code?: string;
+    message?: string;
+    details?: string[];
+  };
+};
+
+type StructureMeta = {
+  mode: "live" | "sample";
+  confidence: number;
+  needsReviewCount: number;
+};
+
 const initialCards: KnowledgeCard[] = [
   {
     id: 1042,
@@ -61,6 +96,7 @@ const initialCards: KnowledgeCard[] = [
     createdAt: "오늘 14:32",
     status: "검토 대기",
     confidence: 91,
+    structureMode: "sample",
     views: 0,
   },
   {
@@ -77,6 +113,7 @@ const initialCards: KnowledgeCard[] = [
     createdAt: "어제 17:18",
     status: "승인",
     confidence: 96,
+    structureMode: "sample",
     views: 18,
   },
   {
@@ -93,6 +130,7 @@ const initialCards: KnowledgeCard[] = [
     createdAt: "8월 15일",
     status: "승인",
     confidence: 94,
+    structureMode: "sample",
     views: 11,
   },
   {
@@ -109,6 +147,7 @@ const initialCards: KnowledgeCard[] = [
     createdAt: "8월 14일",
     status: "검토 대기",
     confidence: 78,
+    structureMode: "sample",
     views: 2,
   },
 ];
@@ -138,6 +177,10 @@ export default function Workspace() {
   const [seconds, setSeconds] = useState(0);
   const [transcript, setTranscript] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+  const [speechNotice, setSpeechNotice] = useState("");
+  const [structureMeta, setStructureMeta] = useState<StructureMeta | null>(null);
+  const [criticalConfirmed, setCriticalConfirmed] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState(initialCards[0].id);
   const [search, setSearch] = useState("");
   const [question, setQuestion] = useState("");
@@ -149,12 +192,12 @@ export default function Workspace() {
     kind: "문제" as KnowledgeCard["kind"],
     process: "A모델 최종 조립",
     equipment: "조립 2라인 · AS-02",
-    quantity: "50개",
-    defect: "누설 불량 3개",
-    symptom: "누설 검사 불합격",
-    cause: "실링 고무가 홈 안쪽으로 밀림",
-    action: "실링 위치 재조정 후 둘레 확인",
-    result: "재작업 3개 모두 재검사 통과",
+    quantity: "",
+    defect: "",
+    symptom: "",
+    cause: "",
+    action: "",
+    result: "",
   });
 
   useEffect(() => {
@@ -175,8 +218,31 @@ export default function Workspace() {
   useEffect(() => {
     if (!recording) return;
     const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
-    return () => window.clearInterval(timer);
+    const limit = window.setTimeout(() => {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // The recognizer may already have stopped itself.
+      }
+      recognitionRef.current = null;
+      setSeconds(180);
+      setRecording(false);
+      setSpeechNotice("최대 녹음 시간 3분에 도달해 음성 인식을 종료했습니다.");
+    }, 180_000);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(limit);
+    };
   }, [recording]);
+
+  useEffect(() => () => {
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // Ignore browser-specific shutdown errors during unmount.
+    }
+    recognitionRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -201,6 +267,7 @@ export default function Workspace() {
   ];
 
   function changeView(nextView: View) {
+    if (recording) stopRecording();
     if (nextView === "knowledge" && selectedCard?.status !== "승인" && approvedCards[0]) {
       setSelectedCardId(approvedCards[0].id);
     }
@@ -208,12 +275,18 @@ export default function Workspace() {
       setSelectedCardId(pendingCards[0].id);
     }
     setView(nextView);
-    if (nextView !== "capture") setCaptureStage(0);
+    if (nextView !== "capture") {
+      setCaptureStage(0);
+      setAnalysisError("");
+      setStructureMeta(null);
+      setCriticalConfirmed(false);
+    }
   }
 
   function startRecording() {
+    setAnalysisError("");
+    setSpeechNotice("");
     setSeconds(0);
-    setRecording(true);
 
     const speechWindow = window as typeof window & {
       SpeechRecognition?: RecognitionConstructor;
@@ -222,7 +295,7 @@ export default function Workspace() {
     const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
 
     if (!Recognition) {
-      window.setTimeout(() => setTranscript(demoTranscript), 1100);
+      setSpeechNotice("이 브라우저는 음성 인식을 지원하지 않습니다. 인식된 내용 칸에 직접 입력하거나 샘플 문장을 불러와 주세요.");
       return;
     }
 
@@ -237,40 +310,142 @@ export default function Workspace() {
       setTranscript(nextTranscript);
     };
     recognition.onerror = () => {
-      setTranscript((value) => value || demoTranscript);
+      setSpeechNotice("음성을 인식하지 못했습니다. 마이크 권한과 브라우저 설정을 확인하거나 내용을 직접 입력해 주세요.");
       setRecording(false);
     };
-    recognition.onend = () => setRecording(false);
+    recognition.onend = () => {
+      setRecording(false);
+      recognitionRef.current = null;
+    };
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+      setRecording(true);
+    } catch {
+      recognitionRef.current = null;
+      setRecording(false);
+      setSpeechNotice("마이크를 시작하지 못했습니다. 브라우저 권한을 확인하거나 내용을 직접 입력해 주세요.");
+    }
   }
 
   function stopRecording() {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setRecording(false);
-    setTranscript((value) => value || demoTranscript);
   }
 
-  function analyzeTranscript() {
-    if (!transcript.trim()) {
-      setTranscript(demoTranscript);
+  async function analyzeTranscript() {
+    const source = transcript.trim();
+    if (!source) {
+      setAnalysisError("먼저 음성으로 기록하거나 인식된 내용을 직접 입력해주세요.");
+      return;
     }
+
+    if (recording) stopRecording();
     setProcessing(true);
-    window.setTimeout(() => {
-      const source = transcript || demoTranscript;
-      const quantities = [...source.matchAll(/(\d+)\s*개/g)].map((match) => match[1]);
+    setAnalysisError("");
+    setStructureMeta(null);
+
+    try {
+      const response = await fetch("/api/structure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript: source,
+          process: draft.process,
+          equipment: draft.equipment,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | StructureSuccessResponse
+        | StructureErrorResponse
+        | null;
+
+      if (!response.ok || !payload || payload.ok !== true) {
+        const errorPayload = payload as StructureErrorResponse | null;
+        const errorCode =
+          typeof errorPayload?.error === "object"
+            ? errorPayload.error.code
+            : errorPayload?.code;
+        const errorMessage =
+          typeof errorPayload?.error === "object"
+            ? errorPayload.error.message
+            : errorPayload?.error;
+        if (
+          response.status === 503 ||
+          errorCode === "AI_NOT_CONFIGURED" ||
+          errorMessage?.includes("API 키")
+        ) {
+          throw new Error("AI API 키가 아직 설정되지 않았습니다. 설정 후 다시 시도하거나 샘플 결과로 계속할 수 있습니다.");
+        }
+        if (response.status === 429) {
+          throw new Error("현재 AI 요청 한도를 초과했습니다. 잠시 후 다시 시도하거나 샘플 결과로 계속해주세요.");
+        }
+        throw new Error("AI 구조화 요청을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.");
+      }
+
+      if (payload.mode !== "live" || !payload.data) {
+        throw new Error("AI 서버 응답 형식을 확인할 수 없습니다. 다시 시도해주세요.");
+      }
+
+      const data = payload.data;
+      if (!Array.isArray(data.needsReview)) {
+        throw new Error("AI 서버 응답 형식을 확인할 수 없습니다. 다시 시도해주세요.");
+      }
+      const confidenceValue = Number(data.confidence);
+      const confidence = Number.isFinite(confidenceValue)
+        ? Math.max(0, Math.min(100, Math.round(confidenceValue <= 1 ? confidenceValue * 100 : confidenceValue)))
+        : 0;
+      const needsReviewCount = data.needsReview.length;
+
       setDraft((current) => ({
-        ...current,
-        quantity: quantities[0] ? `${quantities[0]}개` : current.quantity,
-        defect: quantities[1] ? `누설 불량 ${quantities[1]}개` : current.defect,
+        kind: ["문제", "개선", "노하우"].includes(data.kind)
+          ? (data.kind as KnowledgeCard["kind"])
+          : current.kind,
+        process: data.process || current.process,
+        equipment: data.equipment || current.equipment,
+        quantity: data.quantity,
+        defect: data.defect,
+        symptom: data.symptom,
+        cause: data.cause,
+        action: data.action,
+        result: data.result,
       }));
-      setProcessing(false);
+      setStructureMeta({ mode: "live", confidence, needsReviewCount });
+      setCriticalConfirmed(false);
       setCaptureStage(2);
-    }, 900);
+    } catch (error) {
+      setAnalysisError(
+        error instanceof TypeError
+          ? "AI 서버에 연결하지 못했습니다. 네트워크 상태를 확인하고 다시 시도해주세요."
+          : error instanceof Error && error.message
+            ? error.message
+            : "AI 구조화 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+      );
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  function continueWithSample() {
+    setDraft((current) => ({
+      ...current,
+      kind: "문제",
+      quantity: "50개",
+      defect: "누설 불량 3개",
+      symptom: "누설 검사 불합격",
+      cause: "실링 고무가 홈 안쪽으로 밀림",
+      action: "실링 위치 재조정 후 둘레 확인",
+      result: "재작업 3개 모두 재검사 통과",
+    }));
+    setAnalysisError("");
+    setStructureMeta({ mode: "sample", confidence: 0, needsReviewCount: 9 });
+    setCriticalConfirmed(false);
+    setCaptureStage(2);
   }
 
   function saveDraft() {
+    if (!criticalConfirmed) return;
     const newCard: KnowledgeCard = {
       id: Date.now(),
       title: `${draft.process} — ${draft.defect}`,
@@ -284,7 +459,8 @@ export default function Workspace() {
       author: "김민수",
       createdAt: "방금 전",
       status: "검토 대기",
-      confidence: 91,
+      confidence: structureMeta?.mode === "live" ? structureMeta.confidence : 0,
+      structureMode: structureMeta?.mode ?? "sample",
       views: 0,
     };
     const nextCards = [newCard, ...cards];
@@ -442,6 +618,8 @@ export default function Workspace() {
                 <span className="section-kicker">STEP 02 · 질문 1/3</span>
                 <h2>오늘 작업에서 어려웠던 점과<br />어떻게 해결했는지 말해주세요.</h2>
                 <p>품목, 수량, 증상, 조치를 함께 말하면 더 정확하게 정리할 수 있어요.</p>
+                <div className="ai-connection-status"><i aria-hidden="true" />실제 AI 연결 시 구조화</div>
+                <div className="privacy-notice"><b>입력 전 확인</b><span>음성 인식은 브라우저 제공자에서 처리될 수 있고, 확인한 텍스트는 구조화를 위해 OpenAI로 전송됩니다. 이 앱은 원음 파일을 저장하지 않습니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</span></div>
                 <div className={`recorder ${recording ? "recording" : ""}`}>
                   <button type="button" aria-label={recording ? "녹음 중지" : "녹음 시작"} onClick={recording ? stopRecording : startRecording}><i /><span>{recording ? "멈추기" : "눌러서 말하기"}</span></button>
                   <div className="recorder-wave" aria-hidden="true">
@@ -449,15 +627,31 @@ export default function Workspace() {
                   </div>
                   <strong>{String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")}</strong><small>최대 03:00</small>
                 </div>
-                <label className="transcript-field"><span>인식된 내용 <small>직접 수정할 수 있어요</small></span><textarea value={transcript} onChange={(event) => setTranscript(event.target.value)} placeholder="음성을 인식하면 여기에 내용이 표시됩니다." /></label>
-                <div className="button-row"><button className="ghost-action" type="button" onClick={() => setCaptureStage(0)}>← 이전</button><button className="wide-primary inline" type="button" disabled={processing} onClick={analyzeTranscript}>{processing ? "AI가 구조화하는 중…" : "AI로 내용 정리"}<span>→</span></button></div>
+                <label className="transcript-field"><span>인식된 내용 <small>직접 수정할 수 있어요</small></span><textarea value={transcript} onChange={(event) => { setTranscript(event.target.value); setAnalysisError(""); setSpeechNotice(""); }} placeholder="음성을 인식하면 여기에 내용이 표시됩니다." /></label>
+                <div className="transcript-tools">
+                  {speechNotice && <p role="status">{speechNotice}</p>}
+                  <button type="button" onClick={() => { setTranscript(demoTranscript); setSpeechNotice("샘플 문장을 불러왔습니다. 실제 음성 인식 결과가 아닙니다."); }}>샘플 문장 불러오기</button>
+                </div>
+                {processing && <div className="analysis-status" role="status">AI가 현장 기록을 분석하고 있습니다. 잠시만 기다려주세요.</div>}
+                {analysisError && (
+                  <div className="analysis-error" role="alert">
+                    <div><b>실제 AI 구조화에 실패했습니다.</b><p>{analysisError}</p></div>
+                    <button type="button" onClick={continueWithSample}>샘플 결과로 계속</button>
+                  </div>
+                )}
+                <div className="button-row"><button className="ghost-action" type="button" onClick={() => { if (recording) stopRecording(); setAnalysisError(""); setSpeechNotice(""); setCaptureStage(0); }}>← 이전</button><button className="wide-primary inline" type="button" disabled={processing} onClick={analyzeTranscript}>{processing ? "AI가 구조화하는 중…" : "AI로 내용 정리"}<span>→</span></button></div>
               </div>
             )}
 
             {captureStage === 2 && (
               <div className="capture-card review-draft-card">
-                <span className="section-kicker">STEP 03</span><h2>중요한 내용만 확인해주세요.</h2><p>AI가 정리한 초안입니다. 숫자와 품목은 작업자가 확인해야 저장됩니다.</p>
-                <div className="confidence-banner"><span>AI 구조화 신뢰도</span><strong>91%</strong><i><b style={{ width: "91%" }} /></i><small>2개 필드 확인 필요</small></div>
+                <span className="section-kicker">STEP 03</span><h2>중요한 내용만 확인해주세요.</h2><p>{structureMeta?.mode === "live" ? "실제 AI가 정리한 초안입니다. 숫자와 품목은 작업자가 확인해야 저장됩니다." : "AI를 사용하지 않은 샘플 초안입니다. 모든 항목을 직접 확인해주세요."}</p>
+                <div className={`confidence-banner ${structureMeta?.mode === "sample" ? "sample" : ""}`}>
+                  <span>{structureMeta?.mode === "live" ? "실제 AI 구조화 신뢰도" : "샘플 결과"}</span>
+                  <strong>{structureMeta?.mode === "live" ? `${structureMeta.confidence}%` : "AI 미사용"}</strong>
+                  <i><b style={{ width: structureMeta?.mode === "live" ? `${structureMeta.confidence}%` : "0%" }} /></i>
+                  <small>{structureMeta?.mode === "live" ? `${structureMeta.needsReviewCount}개 필드 확인 필요` : "전체 필드 직접 확인"}</small>
+                </div>
                 <div className="draft-form">
                   <label><span>기록 유형</span><select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as KnowledgeCard["kind"] })}><option>문제</option><option>개선</option><option>노하우</option></select></label>
                   <label><span>공정</span><input value={draft.process} onChange={(event) => setDraft({ ...draft, process: event.target.value })} /></label>
@@ -468,8 +662,8 @@ export default function Workspace() {
                   <label className="full"><span>조치</span><textarea value={draft.action} onChange={(event) => setDraft({ ...draft, action: event.target.value })} /></label>
                   <label className="full"><span>결과</span><input value={draft.result} onChange={(event) => setDraft({ ...draft, result: event.target.value })} /></label>
                 </div>
-                <label className="confirm-check" htmlFor="critical-field-confirm" aria-label="품목과 수량 확인"><input id="critical-field-confirm" type="checkbox" defaultChecked /><span><b>품목과 수량을 원래 말한 내용과 대조했습니다.</b><small>저장 후 관리자 검토를 거쳐 공식 지식이 됩니다.</small></span></label>
-                <div className="button-row"><button className="ghost-action" type="button" onClick={() => setCaptureStage(1)}>← 다시 말하기</button><button className="wide-primary inline" type="button" onClick={saveDraft}>검토 요청으로 저장 <span>→</span></button></div>
+                <label className="confirm-check" htmlFor="critical-field-confirm" aria-label="품목과 수량 확인"><input id="critical-field-confirm" type="checkbox" checked={criticalConfirmed} onChange={(event) => setCriticalConfirmed(event.target.checked)} /><span><b>품목과 수량을 원래 말한 내용과 대조했습니다.</b><small>확인해야 저장할 수 있으며, 저장 후 관리자 검토를 거쳐 공식 지식이 됩니다.</small></span></label>
+                <div className="button-row"><button className="ghost-action" type="button" onClick={() => { setAnalysisError(""); setStructureMeta(null); setCriticalConfirmed(false); setCaptureStage(1); }}>← 다시 말하기</button><button className="wide-primary inline" type="button" disabled={!criticalConfirmed} onClick={saveDraft}>검토 요청으로 저장 <span>→</span></button></div>
               </div>
             )}
 
@@ -477,7 +671,7 @@ export default function Workspace() {
               <div className="capture-card success-card">
                 <div className="success-mark">✓</div><span className="section-kicker">SAVED</span><h2>현장의 경험을 남겼습니다.</h2><p>관리자가 확인하면 모두가 검색할 수 있는 현장 지식이 됩니다.</p>
                 <div className="saved-summary"><span className="kind-mark 문제">문제</span><div><b>{draft.process} — {draft.defect}</b><small>{draft.equipment} · 방금 전</small></div><span className="status-chip 검토-대기">검토 대기</span></div>
-                <div className="success-actions"><button className="wide-primary" type="button" onClick={() => { setCaptureStage(0); setTranscript(""); }}>하나 더 기록하기 <span>+</span></button><button className="ghost-action" type="button" onClick={() => changeView("dashboard")}>오늘의 현장으로</button></div>
+                <div className="success-actions"><button className="wide-primary" type="button" onClick={() => { setCaptureStage(0); setTranscript(""); setAnalysisError(""); setSpeechNotice(""); setStructureMeta(null); setCriticalConfirmed(false); }}>하나 더 기록하기 <span>+</span></button><button className="ghost-action" type="button" onClick={() => changeView("dashboard")}>오늘의 현장으로</button></div>
               </div>
             )}
           </section>
@@ -492,14 +686,14 @@ export default function Workspace() {
                 {pendingCards.length === 0 && <div className="empty-state">모든 검토를 마쳤습니다.</div>}
                 {pendingCards.map((card) => (
                   <button type="button" className={`queue-item ${selectedCardId === card.id ? "active" : ""}`} key={card.id} onClick={() => setSelectedCardId(card.id)}>
-                    <div><span className={`kind-mark ${card.kind}`}>{card.kind}</span><small>#{card.id}</small></div><b>{card.title}</b><p>{card.process} · {card.author}</p><footer><span>AI 신뢰도 {card.confidence}%</span><span>{card.createdAt}</span></footer>
+                    <div><span className={`kind-mark ${card.kind}`}>{card.kind}</span><small>#{card.id}</small></div><b>{card.title}</b><p>{card.process} · {card.author}</p><footer><span>{card.structureMode === "live" ? `AI 신뢰도 ${card.confidence}%` : "샘플 결과 · AI 미사용"}</span><span>{card.createdAt}</span></footer>
                   </button>
                 ))}
               </div>
               {selectedCard && (
                 <article className="review-detail">
                   <header><div><span className={`kind-mark ${selectedCard.kind}`}>{selectedCard.kind}</span><span>#{selectedCard.id}</span></div><h2>{selectedCard.title}</h2><p>{selectedCard.equipment} · {selectedCard.author} · {selectedCard.createdAt}</p></header>
-                  <div className="source-block"><span>작업자가 말한 원문</span><blockquote>“{selectedCard.symptom}이 있었고, 확인해 보니 {selectedCard.cause}이었습니다. {selectedCard.action}했고 {selectedCard.result}.”</blockquote><small>원음은 구조화 완료 후 삭제됨 · 작업자 확인 완료</small></div>
+                  <div className="source-block"><span>구조화된 기록 요약</span><blockquote>“{selectedCard.symptom}이 있었고, 확인해 보니 {selectedCard.cause}이었습니다. {selectedCard.action}했고 {selectedCard.result}.”</blockquote><small>브라우저에 저장된 구조화 결과 · 원음 파일은 앱에 저장하지 않음</small></div>
                   <dl className="knowledge-fields">
                     <div><dt>상황·증상</dt><dd>{selectedCard.symptom}</dd></div><div><dt>원인 가설</dt><dd>{selectedCard.cause}<small>관리자 확인 필요</small></dd></div><div><dt>실행한 조치</dt><dd>{selectedCard.action}</dd></div><div><dt>확인된 결과</dt><dd>{selectedCard.result}</dd></div>
                   </dl>

@@ -1,24 +1,37 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-async function render(path = "/") {
+async function loadWorker() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
+  return worker;
+}
+
+async function dispatch(request, bindings = {}) {
+  const worker = await loadWorker();
+
   return worker.fetch(
-    new Request(`http://localhost${path}`, {
-      headers: { accept: "text/html", host: "localhost" },
-    }),
+    request,
     {
       ASSETS: {
         fetch: async () => new Response("Not found", { status: 404 }),
       },
+      ...bindings,
     },
     {
       waitUntil() {},
       passThroughOnException() {},
     },
+  );
+}
+
+async function render(path = "/") {
+  return dispatch(
+    new Request(`http://localhost${path}`, {
+      headers: { accept: "text/html", host: "localhost" },
+    }),
   );
 }
 
@@ -46,4 +59,132 @@ test("server-renders the interactive MVP workspace", async () => {
   assert.match(html, /오늘의 현장/);
   assert.match(html, /새 음성 기록/);
   assert.match(html, /상시 녹음하지 않습니다/);
+});
+
+test("rejects invalid structure requests before calling AI", async () => {
+  const response = await dispatch(
+    new Request("http://localhost/api/structure", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ transcript: "" }),
+    }),
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: {
+      code: "INVALID_REQUEST",
+      message: "입력값을 확인해 주세요.",
+      details: ["transcript는 비어 있을 수 없습니다."],
+    },
+  });
+});
+
+test("reports an explicit server configuration error when the API key is missing", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  const response = await dispatch(
+    new Request("http://localhost/api/structure", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ transcript: "조립 중 누설 불량이 발생했습니다." }),
+    }),
+  );
+
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.error.code, "AI_NOT_CONFIGURED");
+  assert.match(body.error.message, /OpenAI API 키/);
+  if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+  else process.env.OPENAI_API_KEY = previousKey;
+});
+
+test("structures a transcript through the Responses API contract", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousModel = process.env.OPENAI_MODEL;
+  process.env.OPENAI_API_KEY = "test-only-key";
+  process.env.OPENAI_MODEL = "gpt-5-mini";
+  let capturedRequest;
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url !== "https://api.openai.com/v1/responses") {
+      return originalFetch(input, init);
+    }
+
+    capturedRequest = { input, init };
+    return Response.json({
+      status: "completed",
+      output: [
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: JSON.stringify({
+                kind: "문제",
+                process: "A모델 최종 조립",
+                equipment: "조립 2라인 · AS-02",
+                quantity: "50개",
+                defect: "누설 불량 3개",
+                symptom: "누설 검사 불합격",
+                cause: "실링 고무가 안쪽으로 밀림",
+                action: "실링 고무 위치를 재조정함",
+                result: "재검사 통과",
+                confidence: 91,
+                needsReview: ["cause"],
+              }),
+            },
+          ],
+        },
+      ],
+    });
+  };
+
+  try {
+    const response = await dispatch(
+      new Request("http://localhost/api/structure", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          transcript: "A모델 50개 중 누설 불량 3개가 발생했습니다.",
+          process: "A모델 최종 조립",
+          equipment: "조립 2라인 · AS-02",
+        }),
+      }),
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      mode: "live",
+      data: {
+        kind: "문제",
+        process: "A모델 최종 조립",
+        equipment: "조립 2라인 · AS-02",
+        quantity: "50개",
+        defect: "누설 불량 3개",
+        symptom: "누설 검사 불합격",
+        cause: "실링 고무가 안쪽으로 밀림",
+        action: "실링 고무 위치를 재조정함",
+        result: "재검사 통과",
+        confidence: 91,
+        needsReview: ["cause"],
+      },
+    });
+
+    assert.ok(capturedRequest);
+    assert.equal(capturedRequest.init.headers.Authorization, "Bearer test-only-key");
+    const upstreamBody = JSON.parse(capturedRequest.init.body);
+    assert.equal(upstreamBody.model, "gpt-5-mini");
+    assert.equal(upstreamBody.store, false);
+    assert.equal(upstreamBody.text.format.type, "json_schema");
+    assert.equal(upstreamBody.text.format.strict, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+    if (previousModel === undefined) delete process.env.OPENAI_MODEL;
+    else process.env.OPENAI_MODEL = previousModel;
+  }
 });
