@@ -98,6 +98,10 @@ export default function Home() {
           <article><span>02</span><h3>작업자가 말합니다</h3><p>현장 용어 그대로 답하면 공정·문제·원인·조치 후보를 자동으로 구조화합니다.</p></article>
           <article><span>03</span><h3>공장이 배웁니다</h3><p>검토된 기록은 지식 카드가 되고, 같은 문제가 생기면 해결 경험을 다시 꺼내줍니다.</p></article>
         </div>
+        <div className="how-cta">
+          <div><span>INTERACTIVE PROTOTYPE</span><b>설명은 여기까지.<br />이제 직접 눌러보세요.</b></div>
+          <Link className="primary-button" href="/app">샘플 체험 바로 시작 <span aria-hidden="true">→</span></Link>
+        </div>
       </section>
 
       <section className="loop-section">
