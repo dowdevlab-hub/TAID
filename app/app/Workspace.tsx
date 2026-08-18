@@ -170,7 +170,7 @@ function persistCards(cards: KnowledgeCard[]) {
 }
 
 export default function Workspace() {
-  const [view, setView] = useState<View>("dashboard");
+  const [view, setView] = useState<View>("capture");
   const [cards, setCards] = useState<KnowledgeCard[]>(initialCards);
   const [captureStage, setCaptureStage] = useState(0);
   const [recording, setRecording] = useState(false);
@@ -528,7 +528,7 @@ export default function Workspace() {
           <b>상시 녹음하지 않습니다.</b>
           <p>작업자가 버튼을 누른 순간만 기록하며 개인평가에 사용하지 않습니다.</p>
         </div>
-        <button className="profile-row" type="button">
+        <button className="profile-row" type="button" onClick={() => setToast("프로토타입에서는 사용자·권한 설정을 제공하지 않습니다.")}>
           <span className="avatar">관리</span>
           <div><b>박지훈 공장장</b><small>관리자</small></div>
           <span aria-hidden="true">•••</span>
@@ -603,6 +603,7 @@ export default function Workspace() {
             {captureStage === 0 && (
               <div className="capture-card context-card">
                 <span className="section-kicker">STEP 01</span><h2>어디에서 있었던 일인가요?</h2><p>설비 QR을 스캔하면 현장 정보가 자동으로 채워집니다.</p>
+                <div className="demo-guide"><b>처음 체험하시나요?</b><span>아래의 ‘선택하고 계속’을 누른 뒤, 다음 화면에서 ‘AI 없이 샘플 전체 흐름 체험’을 선택하세요.</span></div>
                 <button className="qr-button" type="button" onClick={() => setToast("QR 데모: AS-02 설비를 확인했습니다.")}><span>▦</span><b>설비 QR 스캔</b><small>카메라로 설비 코드를 비춰주세요</small></button>
                 <div className="or-line"><span>또는 직접 선택</span></div>
                 <div className="field-grid">
@@ -632,6 +633,7 @@ export default function Workspace() {
                   {speechNotice && <p role="status">{speechNotice}</p>}
                   <button type="button" onClick={() => { setTranscript(demoTranscript); setSpeechNotice("샘플 문장을 불러왔습니다. 실제 음성 인식 결과가 아닙니다."); }}>샘플 문장 불러오기</button>
                 </div>
+                <button className="sample-flow-shortcut" type="button" onClick={() => { setTranscript(demoTranscript); setSpeechNotice("AI를 사용하지 않는 샘플 흐름입니다."); continueWithSample(); }}><b>AI 없이 샘플 전체 흐름 체험</b><span>키 설정 전에도 검토·저장·승인 흐름을 바로 볼 수 있습니다. →</span></button>
                 {processing && <div className="analysis-status" role="status">AI가 현장 기록을 분석하고 있습니다. 잠시만 기다려주세요.</div>}
                 {analysisError && (
                   <div className="analysis-error" role="alert">
@@ -682,7 +684,7 @@ export default function Workspace() {
             <div className="view-heading"><div><p>TAID KNOWLEDGE</p><h1>지식 승인함 <span>{pendingCards.length}</span></h1></div><p className="heading-note">AI 초안을 관리자가 검증한 뒤에만<br />공식 현장 지식으로 게시합니다.</p></div>
             <div className="review-layout">
               <div className="review-queue">
-                <div className="queue-filter"><b>검토 대기</b><span>{pendingCards.length}건</span><button type="button">오래된 순⌄</button></div>
+                <div className="queue-filter"><b>검토 대기</b><span>{pendingCards.length}건</span><button type="button" onClick={() => setToast("프로토타입은 현재 등록 순서로 표시합니다.")}>등록 순⌄</button></div>
                 {pendingCards.length === 0 && <div className="empty-state">모든 검토를 마쳤습니다.</div>}
                 {pendingCards.map((card) => (
                   <button type="button" className={`queue-item ${selectedCardId === card.id ? "active" : ""}`} key={card.id} onClick={() => setSelectedCardId(card.id)}>
@@ -710,7 +712,7 @@ export default function Workspace() {
             <div className="view-heading"><div><p>APPROVED KNOWLEDGE ONLY</p><h1>현장 지식 검색</h1></div><div className="knowledge-stat"><strong>{approvedCards.length + 27}</strong><span>검증된 지식</span></div></div>
             <div className="coach-box"><span className="coach-mark">T.</span><div><b>현장 지식에게 물어보세요</b><p>승인된 우리 공장 기록에서만 답하고, 근거가 없으면 모른다고 말합니다.</p><div><input value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => event.key === "Enter" && askKnowledge()} placeholder="예: CNC-03 진동이 커지면 무엇부터 확인하지?" /><button type="button" onClick={askKnowledge}>질문하기 →</button></div></div></div>
             {answer && <div className="coach-answer"><span>TAID 답변</span><p>{answer}</p>{answer.includes("승인 사례") && <button type="button" onClick={() => setSelectedCardId(1038)}>근거 · #1038 CNC-03 진동 증가 시 척 체결 순서 ↗</button>}</div>}
-            <div className="knowledge-toolbar"><div className="search-field"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="증상, 설비, 공정, 원인으로 검색" /></div><button type="button">전체 공정⌄</button><button type="button">전체 유형⌄</button></div>
+            <div className="knowledge-toolbar"><div className="search-field"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="증상, 설비, 공정, 원인으로 검색" /></div><button type="button" onClick={() => setToast("공정 필터는 다음 MVP 범위입니다.")}>전체 공정⌄</button><button type="button" onClick={() => setToast("유형 필터는 다음 MVP 범위입니다.")}>전체 유형⌄</button></div>
             <div className="knowledge-layout">
               <div className="knowledge-list">
                 {filteredCards.map((card) => (

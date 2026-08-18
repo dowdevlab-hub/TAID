@@ -74,7 +74,7 @@ export default function Home() {
               <div><dt>문제</dt><dd>누설 불량 3개</dd></div>
               <div><dt>추정 원인</dt><dd>실링 고무 위치</dd></div>
             </dl>
-            <button type="button">내용 확인하고 저장 <span aria-hidden="true">→</span></button>
+            <Link className="preview-cta" href="/app">이 화면 직접 체험하기 <span aria-hidden="true">→</span></Link>
           </div>
           <div className="product-caption">
             <span>01</span>

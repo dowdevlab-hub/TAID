@@ -44,6 +44,7 @@ test("server-renders the TAID homepage", async () => {
   assert.match(html, /<title>TAID.*말하는 현장, 배우는 공장<\/title>/i);
   assert.match(html, /현장은 말하고/);
   assert.match(html, /3분 기록 시작하기/);
+  assert.match(html, /이 화면 직접 체험하기/);
   assert.match(html, /href="\/app"/);
   assert.match(html, /\/og\.png/);
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/);
@@ -56,8 +57,9 @@ test("server-renders the interactive MVP workspace", async () => {
   const html = await response.text();
   assert.match(html, /<title>TAID Workspace.*현장 지식 운영<\/title>/i);
   assert.match(html, /INTERACTIVE MVP/);
-  assert.match(html, /오늘의 현장/);
-  assert.match(html, /새 음성 기록/);
+  assert.match(html, /3분 현장 기록/);
+  assert.match(html, /처음 체험하시나요/);
+  assert.match(html, /선택하고 계속/);
   assert.match(html, /상시 녹음하지 않습니다/);
 });
 
