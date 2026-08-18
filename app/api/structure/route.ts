@@ -4,6 +4,7 @@ const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = "gpt-5-mini";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_BODY_CHARACTERS = 8_000;
+const MAX_BODY_BYTES = MAX_BODY_CHARACTERS * 4;
 const MAX_TRANSCRIPT_CHARACTERS = 6_000;
 const MAX_CONTEXT_CHARACTERS = 160;
 
@@ -304,8 +305,17 @@ function summarizeUpstreamFailure(status: number) {
 }
 
 export async function POST(request: Request) {
-  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.includes("application/json")) {
+  const contentLengthHeader = request.headers.get("content-length");
+  if (contentLengthHeader !== null) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+      return errorResponse(413, "PAYLOAD_TOO_LARGE", "요청 본문이 너무 큽니다.");
+    }
+  }
+
+  const contentType = request.headers.get("content-type") ?? "";
+  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
     return errorResponse(
       415,
       "INVALID_CONTENT_TYPE",
@@ -320,7 +330,10 @@ export async function POST(request: Request) {
     return errorResponse(400, "INVALID_JSON", "요청 본문을 읽을 수 없습니다.");
   }
 
-  if (rawBody.length > MAX_BODY_CHARACTERS) {
+  if (
+    rawBody.length > MAX_BODY_CHARACTERS ||
+    new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES
+  ) {
     return errorResponse(413, "PAYLOAD_TOO_LARGE", "요청 본문이 너무 큽니다.");
   }
 

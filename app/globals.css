@@ -283,6 +283,8 @@ button { font: inherit; }
 .feed-item:hover b { color: #e75437; }
 .feed-item b { font-size: 13px; }
 .feed-item p { margin: 5px 0 0; color: #737d77; font-size: 9px; }
+.mode-chip { display: inline-flex; margin-left: 5px; padding: 2px 4px; border: 1px solid #d2b75d; background: #fff4c9; color: #725812; font: 800 7px/1 "Courier New", monospace; letter-spacing: .04em; vertical-align: middle; }
+.mode-chip.live { border-color: #8eb949; background: #edf8d9; color: #476516; }
 .kind-mark { display: inline-flex; justify-content: center; align-items: center; width: fit-content; min-width: 38px; height: 22px; padding: 0 7px; font-size: 9px; font-weight: 850; }
 .kind-mark.문제 { background: #ffe1d9; color: #a23d28; }
 .kind-mark.개선 { background: #e7f5bf; color: #4a6513; }
@@ -334,8 +336,10 @@ button { font: inherit; }
 .ai-connection-status i { width: 7px; height: 7px; border-radius: 50%; background: #88b725; box-shadow: 0 0 0 3px rgba(136,183,37,.15); }
 .privacy-notice { margin-top: 10px; padding: 11px 13px; display: flex; align-items: flex-start; gap: 10px; border-left: 3px solid #ff6846; background: #fff3ef; color: #714738; font-size: 9px; line-height: 1.5; }
 .privacy-notice b { flex: 0 0 auto; color: #a13e29; }
+.privacy-notice code { padding: 1px 4px; background: rgba(161,62,41,.08); color: inherit; font: 700 8px/1.4 "Courier New", monospace; }
 .recorder { margin-top: 30px; padding: 26px 22px 20px; display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 18px; background: #17211d; color: white; }
 .recorder > button { grid-row: span 2; width: 96px; height: 96px; display: grid; place-items: center; align-content: center; gap: 8px; border: 1px solid rgba(255,255,255,.24); border-radius: 50%; background: #ff6846; color: #1d2722; cursor: pointer; }
+.recorder > button:disabled, .transcript-tools button:disabled, .sample-flow-shortcut:disabled { opacity: .5; cursor: not-allowed; }
 .recorder > button i { width: 15px; height: 15px; border-radius: 50%; background: #17211d; }
 .recorder.recording > button i { border-radius: 2px; animation: recorder-pulse 1s infinite; }
 .recorder > button span { font-size: 9px; font-weight: 800; }
@@ -370,6 +374,9 @@ button { font: inherit; }
 .confidence-banner.sample { border: 1px solid #e2c982; background: #fff7dd; }
 .confidence-banner.sample strong { font-size: 11px; white-space: nowrap; }
 .confidence-banner.sample i b { background: transparent; }
+.review-field-list { margin-top: 12px; padding: 11px 13px; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; border: 1px solid #ead39a; background: #fffaf0; }
+.review-field-list b { margin-right: 3px; color: #725522; font-size: 9px; }
+.review-field-list span { padding: 4px 7px; border: 1px solid #e3bd6b; background: white; color: #74531b; font-size: 8px; font-weight: 750; }
 .draft-form { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .draft-form label.full { grid-column: 1 / -1; }
 .draft-form label.critical { padding: 10px; border: 1px solid #ffb29f; background: #fff6f3; }
@@ -381,6 +388,7 @@ button { font: inherit; }
 .confirm-check b, .confirm-check small { display: block; }
 .confirm-check b { font-size: 10px; }
 .confirm-check small { margin-top: 4px; color: #758079; font-size: 8px; }
+.required-field-warning { margin: 16px 0 0; padding: 10px 12px; border-left: 3px solid #d34f34; background: #fff0ec; color: #8d3525; font-size: 9px; font-weight: 700; line-height: 1.55; }
 .success-card { max-width: 650px; padding-top: 64px; padding-bottom: 55px; text-align: center; }
 .success-mark { width: 76px; height: 76px; margin: 0 auto 22px; display: grid; place-items: center; border-radius: 50%; background: #c8ff3d; color: #17211d; font-size: 34px; font-weight: 900; }
 .saved-summary { margin-top: 30px; padding: 16px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 13px; border: 1px solid #d9ddd7; background: #f6f5f0; text-align: left; }
@@ -423,6 +431,12 @@ button { font: inherit; }
 .approval-actions { position: absolute; inset: auto 0 0; min-height: 72px; padding: 12px 42px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #d8dcd7; background: white; }
 .approval-actions button { padding: 0 18px; border: 1px solid #bdc4be; background: white; color: #334039; font-size: 10px; font-weight: 750; cursor: pointer; }
 .approval-actions button:last-child { border-color: #17211d; background: #17211d; color: #c8ff3d; }
+.review-status-note { margin-top: 24px; padding: 14px 16px; display: flex; align-items: center; gap: 10px; border-left: 3px solid #a4ada7; background: #f2f4f1; }
+.review-status-note b { font-size: 10px; }
+.review-status-note span { color: #69746e; font-size: 9px; }
+.review-status-note.approved { border-left-color: #789f22; background: #f0f7e4; }
+.review-status-note.rejected { border-left-color: #d36a52; background: #fff1ed; }
+.demo-data-label { display: inline-flex; margin-left: 6px; padding: 3px 5px; border: 1px solid #d4b24e; background: #fff3c8; color: #735812; font: 800 7px/1 "Courier New", monospace; letter-spacing: .06em; vertical-align: middle; }
 
 .knowledge-stat { display: flex; align-items: center; gap: 10px; }
 .knowledge-stat strong { font-size: 33px; letter-spacing: -.05em; }

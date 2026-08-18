@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+const MAX_API_BODY_BYTES = 32_000;
+
 async function loadWorker() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
@@ -63,6 +65,89 @@ test("server-renders the interactive MVP workspace", async () => {
   assert.match(html, /처음 체험하시나요/);
   assert.match(html, /선택하고 계속/);
   assert.match(html, /상시 녹음하지 않습니다/);
+  assert.match(html, /INTERACTIVE MVP · DEMO ENVIRONMENT/);
+  assert.match(html, /MVP · DEMO/);
+  assert.match(html, /설비 QR 데모/);
+});
+
+test("allows only POST for structure requests", async () => {
+  const getResponse = await dispatch(
+    new Request("http://localhost/api/structure", { method: "GET" }),
+  );
+  assert.equal(getResponse.status, 405);
+
+  const optionsResponse = await dispatch(
+    new Request("http://localhost/api/structure", { method: "OPTIONS" }),
+  );
+  assert.equal(optionsResponse.status, 204);
+  assert.match(optionsResponse.headers.get("allow") ?? "", /\bPOST\b/);
+});
+
+test("requires an exact application/json media type", async () => {
+  const response = await dispatch(
+    new Request("http://localhost/api/structure", {
+      method: "POST",
+      headers: { "content-type": "text/application/json" },
+      body: JSON.stringify({ transcript: "테스트 기록" }),
+    }),
+  );
+
+  assert.equal(response.status, 415);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), {
+    error: {
+      code: "INVALID_CONTENT_TYPE",
+      message: "Content-Type은 application/json이어야 합니다.",
+    },
+  });
+});
+
+test("accepts application/json parameters", async () => {
+  const response = await dispatch(
+    new Request("http://localhost/api/structure", {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ transcript: "" }),
+    }),
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, "INVALID_REQUEST");
+});
+
+test("rejects an oversized declared body before parsing it", async () => {
+  const response = await dispatch(
+    new Request("http://localhost/api/structure", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(MAX_API_BODY_BYTES + 1),
+      },
+      body: "{}",
+    }),
+  );
+
+  assert.equal(response.status, 413);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), {
+    error: {
+      code: "PAYLOAD_TOO_LARGE",
+      message: "요청 본문이 너무 큽니다.",
+    },
+  });
+});
+
+test("rejects an oversized body when content-length is absent", async () => {
+  const response = await dispatch(
+    new Request("http://localhost/api/structure", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "x".repeat(8_001),
+    }),
+  );
+
+  assert.equal(response.status, 413);
+  assert.equal((await response.json()).error.code, "PAYLOAD_TOO_LARGE");
 });
 
 test("rejects invalid structure requests before calling AI", async () => {
