@@ -52,6 +52,19 @@ type KnowledgeCard = {
   views: number;
 };
 
+type NoIssueCheckIn = {
+  id: number;
+  periodKey: string;
+  participantKey: string;
+  workOrder: string;
+  product: string;
+  process: string;
+  equipment: string;
+  durationSeconds: number;
+};
+
+type CompletionMode = "knowledge" | "no-issues" | null;
+
 type DraftRecord = {
   kind: KnowledgeCard["kind"];
   workOrder: string;
@@ -97,6 +110,8 @@ const CONTEXT_OPTIONS = [
 
 const MAX_ANSWER_CHARACTERS = 1_800;
 const MAX_TRANSCRIPT_CHARACTERS = 6_000;
+const DEMO_PERIOD_KEY = "pilot-week-4";
+const DEMO_PARTICIPANT_KEY = "demo-worker-01";
 
 const REFLECTION_QUESTIONS = [
   {
@@ -287,9 +302,17 @@ const navItems: { key: View; label: string; icon: string }[] = [
 
 const captureSteps = ["현장 선택", "말로 기록", "내용 확인", "저장 완료"];
 const STORAGE_KEY = "taid-mvp-cards-v2";
+const NO_ISSUE_STORAGE_KEY = "taid-mvp-no-issue-checkins-v1";
 
 function persistCards(cards: KnowledgeCard[]) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, cards }));
+}
+
+function persistNoIssueCheckIns(checkIns: NoIssueCheckIn[]) {
+  window.localStorage.setItem(
+    NO_ISSUE_STORAGE_KEY,
+    JSON.stringify({ version: 1, checkIns }),
+  );
 }
 
 function isReviewField(value: unknown): value is ReviewField {
@@ -322,7 +345,9 @@ function buildCombinedTranscript(answers: string[], context: DraftRecord) {
 export default function Workspace() {
   const [view, setView] = useState<View>("capture");
   const [cards, setCards] = useState<KnowledgeCard[]>(initialCards);
+  const [noIssueCheckIns, setNoIssueCheckIns] = useState<NoIssueCheckIn[]>([]);
   const [captureStage, setCaptureStage] = useState(0);
+  const [completionMode, setCompletionMode] = useState<CompletionMode>(null);
   const [recording, setRecording] = useState(false);
   const [finalizingRecording, setFinalizingRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -411,6 +436,20 @@ export default function Workspace() {
           window.localStorage.removeItem(STORAGE_KEY);
         }
       }
+      const storedNoIssueCheckIns = window.localStorage.getItem(NO_ISSUE_STORAGE_KEY);
+      if (storedNoIssueCheckIns) {
+        try {
+          const parsed = JSON.parse(storedNoIssueCheckIns) as {
+            version?: number;
+            checkIns?: NoIssueCheckIn[];
+          };
+          if (parsed.version === 1 && Array.isArray(parsed.checkIns)) {
+            setNoIssueCheckIns(parsed.checkIns);
+          }
+        } catch {
+          window.localStorage.removeItem(NO_ISSUE_STORAGE_KEY);
+        }
+      }
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -480,6 +519,9 @@ export default function Workspace() {
   const selectedCard = cards.find((card) => card.id === selectedCardId) ?? cards[0];
   const pendingCards = cards.filter((card) => card.status === "검토 대기");
   const approvedCards = cards.filter((card) => card.status === "승인");
+  const currentPeriodNoIssueCheckIns = noIssueCheckIns.filter(
+    (checkIn) => checkIn.periodKey === DEMO_PERIOD_KEY,
+  );
   const filteredCards = approvedCards.filter((card) =>
     `${card.title} ${card.workOrder} ${card.product} ${card.process} ${card.equipment} ${card.symptom} ${card.cause} ${card.action} ${card.sourceAnswers.join(" ")}`
       .toLowerCase()
@@ -487,7 +529,7 @@ export default function Workspace() {
   );
 
   const metrics = [
-    { label: "이번 주 회고", value: "42", unit: "건", delta: "+8 지난주 대비", tone: "orange" },
+    { label: "이번 주 회고", value: String(42 + currentPeriodNoIssueCheckIns.length), unit: "건", delta: currentPeriodNoIssueCheckIns.length > 0 ? `특이사항 없음 +${currentPeriodNoIssueCheckIns.length}` : "+8 지난주 대비", tone: "orange" },
     { label: "4주차 참여율", value: "74", unit: "%", delta: "목표 70% 통과", tone: "lime" },
     { label: "승인 지식", value: String(approvedCards.length + 27), unit: "개", delta: "이번 주 +6", tone: "plain" },
     { label: "검토 대기", value: String(pendingCards.length), unit: "건", delta: "평균 1.2일", tone: "plain" },
@@ -508,6 +550,12 @@ export default function Workspace() {
   const draftHasErrors = missingRequiredFields.length > 0 || Boolean(numericValidationError);
   const draftTitleDetail = draft.defect.trim() || draft.symptom.trim() || "새 현장 기록";
   const fieldsNeedingReview = structureMeta?.needsReview ?? [];
+  const latestNoIssueCheckIn = noIssueCheckIns[0];
+  const reflectionAnswersWithCurrent = [...reflectionAnswers];
+  reflectionAnswersWithCurrent[reflectionQuestionIndex] = transcript.trim();
+  const allReflectionAnswersAreNoIssue = reflectionAnswersWithCurrent.every(
+    (answer) => answer.trim() === "특이사항 없음",
+  );
 
   function updateDraftField<Field extends keyof DraftRecord>(
     field: Field,
@@ -566,6 +614,7 @@ export default function Workspace() {
     cancelAnalysis();
     recognitionBaseTranscriptRef.current = "";
     setCaptureStage(0);
+    setCompletionMode(null);
     setSeconds(0);
     setReflectionQuestionIndex(0);
     setReflectionAnswers(["", "", ""]);
@@ -739,6 +788,56 @@ export default function Workspace() {
     setTranscriptReviewRequired(false);
   }
 
+  function completeNoIssuesReflection(answerOverride?: string[]) {
+    const currentAnswers = answerOverride ?? getReflectionAnswersWithCurrent();
+    const hasDetailedAnswer = currentAnswers.some(
+      (answer) => answer.trim() && answer.trim() !== "특이사항 없음",
+    );
+    if (
+      hasDetailedAnswer &&
+      !window.confirm("작성 중인 답변 대신 오늘 전체를 ‘특이사항 없음’으로 완료할까요?")
+    ) {
+      return;
+    }
+
+    stopRecording();
+    cancelAnalysis();
+    const noIssueAnswers = REFLECTION_QUESTIONS.map(() => "특이사항 없음");
+    const existingCheckIn = noIssueCheckIns.find((checkIn) => (
+      checkIn.periodKey === DEMO_PERIOD_KEY &&
+      checkIn.participantKey === DEMO_PARTICIPANT_KEY &&
+      checkIn.workOrder === draft.workOrder
+    ));
+    const newCheckIn: NoIssueCheckIn = {
+      id: existingCheckIn?.id ?? noIssueCheckIns.reduce((maxId, checkIn) => Math.max(maxId, checkIn.id), 0) + 1,
+      periodKey: DEMO_PERIOD_KEY,
+      participantKey: DEMO_PARTICIPANT_KEY,
+      workOrder: draft.workOrder,
+      product: draft.product,
+      process: draft.process,
+      equipment: draft.equipment,
+      durationSeconds: seconds,
+    };
+    const nextCheckIns = [
+      newCheckIn,
+      ...noIssueCheckIns.filter((checkIn) => checkIn.id !== existingCheckIn?.id),
+    ];
+
+    setNoIssueCheckIns(nextCheckIns);
+    persistNoIssueCheckIns(nextCheckIns);
+    setReflectionAnswers(noIssueAnswers);
+    setReflectionQuestionIndex(REFLECTION_QUESTIONS.length - 1);
+    setTranscript("특이사항 없음");
+    recognitionBaseTranscriptRef.current = "";
+    setTranscriptReviewRequired(false);
+    setAnalysisError("");
+    setSpeechNotice("");
+    setStructureMeta(null);
+    setCriticalConfirmed(false);
+    setCompletionMode("no-issues");
+    setCaptureStage(3);
+  }
+
   async function analyzeTranscript() {
     if (transcriptReviewRequired) {
       setAnalysisError("전사문을 확인한 뒤 ‘전사문 확인 완료’를 눌러주세요.");
@@ -753,6 +852,10 @@ export default function Workspace() {
     const unansweredQuestion = nextAnswers.findIndex((answer) => !answer.trim());
     if (unansweredQuestion >= 0) {
       setAnalysisError(`${unansweredQuestion + 1}번째 질문에 답하거나 ‘특이사항 없음’을 선택해주세요.`);
+      return;
+    }
+    if (nextAnswers.every((answer) => answer.trim() === "특이사항 없음")) {
+      completeNoIssuesReflection(nextAnswers);
       return;
     }
     const source = buildCombinedTranscript(nextAnswers, draft);
@@ -923,6 +1026,7 @@ export default function Workspace() {
     setCards(nextCards);
     persistCards(nextCards);
     setSelectedCardId(newCard.id);
+    setCompletionMode("knowledge");
     setCaptureStage(3);
   }
 
@@ -956,12 +1060,14 @@ export default function Workspace() {
     if (view === "capture" && !confirmCaptureReset()) return;
     resetCaptureState(false);
     setCards(initialCards);
+    setNoIssueCheckIns([]);
     setSelectedCardId(initialCards[0].id);
     setSearch("");
     setQuestion("");
     setAnswer("");
     setView("capture");
     window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem(NO_ISSUE_STORAGE_KEY);
     setToast("데모 데이터를 처음 상태로 되돌렸습니다.");
   }
 
@@ -1114,7 +1220,8 @@ export default function Workspace() {
                 <p>{REFLECTION_QUESTIONS[reflectionQuestionIndex].helper}</p>
                 <div className="record-context-summary"><span>{draft.workOrder}</span><b>{draft.product}</b><small>{draft.process} · {draft.equipment}</small></div>
                 <div className="ai-connection-status"><i aria-hidden="true" />결과 모드: 분석 전 · LIVE AI 또는 SAMPLE로 구분</div>
-                <div className="privacy-notice"><b>입력 전 확인</b><span>상시 녹음하지 않으며 개인평가에 사용하지 않습니다. 음성은 브라우저 음성 서비스에서 처리될 수 있습니다. 전사문은 OpenAI에 <code>store:false</code>로 전송되며 이 앱은 원음 파일을 저장하지 않습니다. 저장을 누른 구조화 결과는 이 브라우저의 localStorage에 남습니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</span></div>
+                <div className="privacy-notice"><b>입력 전 확인</b><span>상시 녹음하지 않으며 개인평가에 사용하지 않습니다. 음성은 브라우저 음성 서비스에서 처리될 수 있습니다. 전사문은 OpenAI에 <code>store:false</code>로 전송되며 이 앱은 원음 파일을 저장하지 않습니다. 참여 완료 시 작업지시·품목·공정·설비·녹음시간을, 지식 저장 시 구조화 결과를 이 브라우저의 localStorage에 남깁니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</span></div>
+                <button className="no-issues-shortcut" type="button" disabled={processing || recording || finalizingRecording} onClick={() => completeNoIssuesReflection()}><span aria-hidden="true">✓</span><span className="no-issues-copy"><b>오늘 전체 특이사항 없음</b><small>세 질문을 한 번에 완료하고 참여만 기록합니다. AI와 승인함은 사용하지 않습니다.</small></span><i>바로 완료 →</i></button>
                 <div className={`recorder ${recording ? "recording" : ""} ${finalizingRecording ? "finalizing" : ""}`}>
                   <button type="button" disabled={processing || finalizingRecording} aria-label={finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중지" : transcript.trim() ? "기존 내용에 이어 녹음" : "녹음 시작"} onClick={recording ? () => finalizeRecording("녹음을 종료했습니다. 기존 입력은 보존되며 다시 누르면 뒤에 이어집니다.") : startRecording}><i /><span>{finalizingRecording ? "마무리 중" : recording ? "멈추기" : transcript.trim() ? "이어서 말하기" : "눌러서 말하기"}</span></button>
                   <div className="recorder-wave" aria-hidden="true">
@@ -1142,7 +1249,7 @@ export default function Workspace() {
                   {reflectionQuestionIndex < REFLECTION_QUESTIONS.length - 1 ? (
                     <button className="wide-primary inline" type="button" disabled={recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={() => moveToReflectionQuestion(reflectionQuestionIndex + 1)}>다음 질문 {reflectionQuestionIndex + 2}/3 <span>→</span></button>
                   ) : (
-                    <button className="wide-primary inline" type="button" disabled={processing || recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={analyzeTranscript}>{finalizingRecording ? "마지막 음성 반영 중…" : transcriptReviewRequired ? "전사문 확인 필요" : processing ? "AI가 구조화하는 중…" : "3문항을 AI로 정리"}<span>→</span></button>
+                    <button className="wide-primary inline" type="button" disabled={processing || recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={analyzeTranscript}>{finalizingRecording ? "마지막 음성 반영 중…" : transcriptReviewRequired ? "전사문 확인 필요" : processing ? "AI가 구조화하는 중…" : allReflectionAnswersAreNoIssue ? "특이사항 없음으로 회고 완료" : "3문항을 AI로 정리"}<span>→</span></button>
                   )}
                 </div>
               </div>
@@ -1184,9 +1291,20 @@ export default function Workspace() {
 
             {captureStage === 3 && (
               <div className="capture-card success-card">
-                <div className="success-mark">✓</div><span className="section-kicker">SAVED</span><h2>현장의 경험을 남겼습니다.</h2><p>관리자가 확인하면 모두가 검색할 수 있는 현장 지식이 됩니다.</p>
-                <div className={`saved-mode ${structureMeta?.mode === "live" ? "live" : "sample"}`}>{structureMeta?.mode === "live" ? `LIVE AI · 신뢰도 ${structureMeta.confidence}%` : "SAMPLE · AI 미사용"}</div>
-                <div className="saved-summary"><span className={`kind-mark ${draft.kind}`}>{draft.kind}</span><div><b>{draft.process} — {draftTitleDetail}</b><small>{draft.workOrder} · {draft.product}<br />{draft.equipment} · 방금 전</small></div><span className="status-chip 검토-대기">검토 대기</span></div>
+                <div className="success-mark">✓</div>
+                {completionMode === "no-issues" ? (
+                  <>
+                    <span className="section-kicker">CHECK-IN SAVED</span><h2>오늘 회고를 완료했습니다.</h2><p>특이사항 없음으로 참여만 기록했습니다. 관리자 승인과 지식 카드는 생성되지 않습니다.</p>
+                    <div className="saved-mode no-issues">NO ISSUE · AI 미사용</div>
+                    <div className="saved-summary"><span className="no-issue-summary-mark">✓</span><div><b>오늘 전체 특이사항 없음</b><small>{latestNoIssueCheckIn?.workOrder ?? draft.workOrder} · {latestNoIssueCheckIn?.product ?? draft.product}<br />{latestNoIssueCheckIn?.equipment ?? draft.equipment} · {latestNoIssueCheckIn && latestNoIssueCheckIn.durationSeconds > 0 ? `회고 ${Math.floor(latestNoIssueCheckIn.durationSeconds / 60)}분 ${latestNoIssueCheckIn.durationSeconds % 60}초` : "바로 완료"}</small></div><span className="status-chip 승인">참여 완료</span></div>
+                  </>
+                ) : (
+                  <>
+                    <span className="section-kicker">SAVED</span><h2>현장의 경험을 남겼습니다.</h2><p>관리자가 확인하면 모두가 검색할 수 있는 현장 지식이 됩니다.</p>
+                    <div className={`saved-mode ${structureMeta?.mode === "live" ? "live" : "sample"}`}>{structureMeta?.mode === "live" ? `LIVE AI · 신뢰도 ${structureMeta.confidence}%` : "SAMPLE · AI 미사용"}</div>
+                    <div className="saved-summary"><span className={`kind-mark ${draft.kind}`}>{draft.kind}</span><div><b>{draft.process} — {draftTitleDetail}</b><small>{draft.workOrder} · {draft.product}<br />{draft.equipment} · 방금 전</small></div><span className="status-chip 검토-대기">검토 대기</span></div>
+                  </>
+                )}
                 <div className="success-actions"><button className="wide-primary" type="button" onClick={() => resetCaptureState()}>하나 더 기록하기 <span>+</span></button><button className="ghost-action" type="button" onClick={() => changeView("dashboard")}>오늘의 현장으로</button></div>
               </div>
             )}

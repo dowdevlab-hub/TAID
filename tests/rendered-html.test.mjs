@@ -87,6 +87,13 @@ test("keeps explicit three-question and demo mode labels in conditional workspac
   assert.match(source, /LIVE AI/);
   assert.match(source, /SAMPLE · AI 미사용/);
   assert.match(source, /RULE DEMO · RAG 아님/);
+  assert.match(source, /오늘 전체 특이사항 없음/);
+  assert.match(source, /참여만 기록합니다\. AI와 승인함은 사용하지 않습니다/);
+  assert.match(source, /관리자 승인과 지식 카드는 생성되지 않습니다/);
+  assert.match(source, /NO ISSUE · AI 미사용/);
+  assert.match(source, /작업지시·품목·공정·설비·녹음시간/);
+  assert.match(source, /checkIn\.periodKey === DEMO_PERIOD_KEY/);
+  assert.match(source, /checkIn\.workOrder === draft\.workOrder/);
 });
 
 test("allows only POST for structure requests", async () => {

@@ -351,6 +351,14 @@ button { font: inherit; }
 .privacy-notice { margin-top: 10px; padding: 11px 13px; display: flex; align-items: flex-start; gap: 10px; border-left: 3px solid #ff6846; background: #fff3ef; color: #714738; font-size: 9px; line-height: 1.5; }
 .privacy-notice b { flex: 0 0 auto; color: #a13e29; }
 .privacy-notice code { padding: 1px 4px; background: rgba(161,62,41,.08); color: inherit; font: 700 8px/1.4 "Courier New", monospace; }
+.no-issues-shortcut { width: 100%; margin-top: 14px; padding: 13px 15px; display: grid; grid-template-columns: 31px 1fr auto; align-items: center; gap: 12px; border: 1px solid #aebba6; background: #f1f6e9; color: #243126; text-align: left; cursor: pointer; }
+.no-issues-shortcut > span[aria-hidden="true"] { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; background: #c8ff3d; font-size: 16px; font-weight: 900; }
+.no-issues-copy { min-width: 0; }
+.no-issues-shortcut b, .no-issues-shortcut small { display: block; }
+.no-issues-shortcut b { font-size: 10px; }
+.no-issues-shortcut small { margin-top: 3px; color: #63705f; font-size: 8px; line-height: 1.45; }
+.no-issues-shortcut i { color: #42523d; font-size: 8px; font-style: normal; font-weight: 850; white-space: nowrap; }
+.no-issues-shortcut:disabled { opacity: .5; cursor: not-allowed; }
 .recorder { margin-top: 30px; padding: 26px 22px 20px; display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 18px; background: #17211d; color: white; }
 .recorder > button { grid-row: span 2; width: 96px; height: 96px; display: grid; place-items: center; align-content: center; gap: 8px; border: 1px solid rgba(255,255,255,.24); border-radius: 50%; background: #ff6846; color: #1d2722; cursor: pointer; }
 .recorder > button:disabled, .transcript-tools button:disabled, .sample-flow-shortcut:disabled { opacity: .5; cursor: not-allowed; }
@@ -427,7 +435,9 @@ button { font: inherit; }
 .success-mark { width: 76px; height: 76px; margin: 0 auto 22px; display: grid; place-items: center; border-radius: 50%; background: #c8ff3d; color: #17211d; font-size: 34px; font-weight: 900; }
 .saved-mode { width: fit-content; margin: 19px auto -17px; padding: 6px 9px; border: 1px solid #d1b557; background: #fff4c9; color: #725812; font: 800 8px/1 "Courier New", monospace; letter-spacing: .04em; }
 .saved-mode.live { border-color: #8eb949; background: #edf8d9; color: #476516; }
+.saved-mode.no-issues { border-color: #93aa7e; background: #edf6e4; color: #3f5b2f; }
 .saved-summary { margin-top: 30px; padding: 16px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 13px; border: 1px solid #d9ddd7; background: #f6f5f0; text-align: left; }
+.no-issue-summary-mark { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 50%; background: #c8ff3d; font-size: 16px; font-weight: 900; }
 .saved-summary b, .saved-summary small { display: block; }
 .saved-summary b { font-size: 11px; }
 .saved-summary small { margin-top: 5px; color: #7d8781; font-size: 8px; }
@@ -589,6 +599,8 @@ button { font: inherit; }
   .transcript-review-warning { align-items: stretch; flex-direction: column; }
   .transcript-review-warning button { width: 100%; }
   .sample-flow-shortcut { align-items: flex-start; flex-direction: column; }
+  .no-issues-shortcut { grid-template-columns: 31px 1fr; }
+  .no-issues-shortcut i { grid-column: 2; }
   .button-row { display: grid; }
   .button-row .wide-primary.inline { width: 100%; order: -1; }
   .confidence-banner { grid-template-columns: auto auto; }
