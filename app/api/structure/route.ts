@@ -3,7 +3,9 @@ import { env } from "cloudflare:workers";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = "gpt-5-mini";
 const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_BODY_CHARACTERS = 8_000;
+// Keep the semantic transcript limit at 6,000 characters while leaving room
+// for JSON escaping plus the separately supplied process/equipment context.
+const MAX_BODY_CHARACTERS = 16_000;
 const MAX_BODY_BYTES = MAX_BODY_CHARACTERS * 4;
 const MAX_TRANSCRIPT_CHARACTERS = 6_000;
 const MAX_CONTEXT_CHARACTERS = 160;

@@ -108,7 +108,8 @@ const CONTEXT_OPTIONS = [
   { workOrder: "WO-260818-026", product: "C모델 출하 세트", process: "출하 포장", equipment: "포장 1라인 · PR-01" },
 ] as const;
 
-const MAX_ANSWER_CHARACTERS = 1_800;
+const DEMO_CONTEXT = CONTEXT_OPTIONS[0];
+
 const MAX_TRANSCRIPT_CHARACTERS = 6_000;
 const DEMO_PERIOD_KEY = "pilot-week-4";
 const DEMO_PARTICIPANT_KEY = "demo-worker-01";
@@ -118,19 +119,16 @@ const REFLECTION_QUESTIONS = [
     short: "Q1 어려웠던 점",
     title: "오늘 가장 어려웠던 점은 무엇인가요?",
     helper: "작업·불량 수량과 어떤 현상이 있었는지 함께 말해주세요.",
-    placeholder: "예: A모델 50개 중 3개에서 누설 불량이 발생했습니다.",
   },
   {
     short: "Q2 새로 알게 된 점",
     title: "오늘 새롭게 알게 된 것이 있나요?",
     helper: "원인으로 추정한 내용과 확인 과정이 있다면 말해주세요.",
-    placeholder: "예: 실링 고무가 안쪽으로 밀리면 누설이 생길 수 있다는 것을 확인했습니다.",
   },
   {
     short: "Q3 다음 작업자에게",
     title: "다음 사람에게 주고 싶은 한마디는?",
     helper: "실행한 조치, 확인된 결과와 다음 작업자가 볼 점을 말해주세요.",
-    placeholder: "예: 실링 위치를 먼저 확인하고 둘레를 눌러 끼운 뒤 재검사해주세요.",
   },
 ] as const;
 
@@ -139,6 +137,8 @@ const demoReflectionAnswers = [
   "확인해 보니 실링 고무가 홈 안쪽으로 밀려 있었습니다.",
   "실링 고무를 홈에 맞춰 다시 끼우고 둘레를 눌러 확인하니 재작업 3개 모두 재검사를 통과했습니다. 다음 작업자도 실링 위치를 먼저 확인해주세요.",
 ];
+
+const demoReflectionTranscript = demoReflectionAnswers.join(" ");
 
 interface SpeechRecognitionResultLike {
   [index: number]: { transcript: string };
@@ -211,7 +211,9 @@ const initialCards: KnowledgeCard[] = [
     cause: "실링 고무가 홈 안쪽으로 약 2mm 밀림",
     action: "실링 삽입 후 손가락으로 둘레 1회 확인, 지그 기준선 추가",
     result: "재작업 3개 정상, 이후 120개 동일 불량 없음",
-    sourceAnswers: demoReflectionAnswers,
+    sourceAnswers: [
+      "오늘 A모델 밸브 Assy 50개 중 3개가 누설 검사에서 불합격했습니다. 확인해 보니 실링 고무가 홈 안쪽으로 약 2mm 밀려 있었습니다. 실링을 홈에 맞춰 다시 끼운 뒤 손가락으로 둘레를 한 번 확인하고 지그 기준선도 추가했습니다. 재작업 3개는 모두 정상 판정을 받았고 이후 생산한 120개에서는 같은 불량이 없었습니다. 다음 작업자도 실링 위치와 기준선을 먼저 확인해주세요.",
+    ],
     author: "김민수",
     createdAt: "오늘 14:32",
     status: "검토 대기",
@@ -232,9 +234,7 @@ const initialCards: KnowledgeCard[] = [
     action: "1→3→2 순서로 1차 체결 후 토크렌치로 균등 체결",
     result: "진동 해소, 표면조도 Ra 1.4 복귀",
     sourceAnswers: [
-      "Ø28 샤프트 가공 중 진동음이 커지고 표면이 거칠어졌습니다.",
-      "척 2번 조가 먼저 밀착되면 소재 편심이 생긴다는 것을 확인했습니다.",
-      "다음에는 1, 3, 2 순서로 1차 체결하고 토크렌치로 균등하게 조여주세요.",
+      "Ø28 샤프트 가공 중 진동음이 커지고 표면이 거칠어졌습니다. 확인해 보니 척 2번 조가 먼저 밀착되어 소재 편심이 생겼습니다. 1, 3, 2 순서로 1차 체결한 뒤 토크렌치로 균등하게 조이자 진동이 사라지고 표면조도도 Ra 1.4로 돌아왔습니다. 다음 작업자도 이 체결 순서를 지켜주세요.",
     ],
     author: "박성호",
     createdAt: "어제 17:18",
@@ -256,9 +256,7 @@ const initialCards: KnowledgeCard[] = [
     action: "불량 라벨 QR 스캔 후 현장 태블릿에서 1회 재출력",
     result: "건당 처리 6분→2분, 2주간 오출력 없음",
     sourceAnswers: [
-      "라벨 오류가 나면 사무실 PC까지 이동해야 해서 시간이 오래 걸렸습니다.",
-      "승인된 재출력 메뉴를 현장 태블릿에 두면 이동을 줄일 수 있었습니다.",
-      "불량 라벨 QR을 먼저 스캔하고 현장 태블릿에서 1회만 재출력해주세요.",
+      "라벨 오류가 날 때마다 사무실 PC까지 이동해야 했고 현장 프린터에는 승인된 재출력 메뉴가 없었습니다. 불량 라벨 QR을 스캔한 뒤 현장 태블릿에서 한 번만 재출력하도록 바꾸자 건당 처리 시간이 6분에서 2분으로 줄었고 2주 동안 오출력이 없었습니다.",
     ],
     author: "이수진",
     createdAt: "8월 15일",
@@ -280,9 +278,7 @@ const initialCards: KnowledgeCard[] = [
     action: "예비 렌치 교체 후 30개 비교 측정 필요",
     result: "확인 진행 중",
     sourceAnswers: [
-      "B모델 체결 토크가 8.5에서 11.2 N·m 사이로 흔들렸습니다.",
-      "렌치 교정 주기가 지난 것이 원인일 수 있다고 봤지만 아직 확인 중입니다.",
-      "다음 작업자는 예비 렌치로 30개를 비교 측정해 결과를 남겨주세요.",
+      "B모델 체결 토크가 8.5에서 11.2 N·m 사이로 흔들렸습니다. 렌치 교정 주기가 지난 것이 원인일 수 있지만 아직 확인 중입니다. 다음 작업자는 예비 렌치로 바꿔 30개를 비교 측정하고 결과를 남겨주세요.",
     ],
     author: "최은영",
     createdAt: "8월 14일",
@@ -326,22 +322,6 @@ function extractFirstNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function buildCombinedTranscript(answers: string[], context: DraftRecord) {
-  const contextBlock = [
-    "[작업 맥락 — 작업자가 선택한 값]",
-    `작업지시: ${context.workOrder}`,
-    `품목: ${context.product}`,
-    `공정: ${context.process}`,
-    `설비·라인: ${context.equipment}`,
-  ].join("\n");
-
-  const answerBlocks = REFLECTION_QUESTIONS.map(
-    (question, index) => `[${question.short}]\n${answers[index]?.trim() || "특이사항 없음"}`,
-  );
-
-  return [contextBlock, ...answerBlocks].join("\n\n");
-}
-
 export default function Workspace() {
   const [view, setView] = useState<View>("capture");
   const [cards, setCards] = useState<KnowledgeCard[]>(initialCards);
@@ -351,8 +331,6 @@ export default function Workspace() {
   const [recording, setRecording] = useState(false);
   const [finalizingRecording, setFinalizingRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
-  const [reflectionQuestionIndex, setReflectionQuestionIndex] = useState(0);
-  const [reflectionAnswers, setReflectionAnswers] = useState<string[]>(["", "", ""]);
   const [transcript, setTranscript] = useState("");
   const [processing, setProcessing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
@@ -461,7 +439,7 @@ export default function Workspace() {
       1000,
     );
     const limit = window.setTimeout(() => {
-      finalizeRecording("전체 회고의 최대 녹음 시간 3분에 도달해 종료했습니다. 입력된 답변은 그대로 보존됩니다.");
+      finalizeRecording("한 번의 회고가 최대 녹음 시간 3분에 도달해 종료됐습니다. 지금까지의 전사문은 그대로 보존됩니다.");
     }, Math.max(0, 180 - seconds) * 1000);
     return () => {
       window.clearInterval(timer);
@@ -498,7 +476,6 @@ export default function Workspace() {
 
   const captureWorkInProgress = view === "capture" && captureStage > 0 && captureStage < 3 && Boolean(
     transcript.trim() ||
-    reflectionAnswers.some((answer) => answer.trim()) ||
     structureMeta ||
     recording ||
     finalizingRecording ||
@@ -549,13 +526,12 @@ export default function Workspace() {
         : "";
   const draftHasErrors = missingRequiredFields.length > 0 || Boolean(numericValidationError);
   const draftTitleDetail = draft.defect.trim() || draft.symptom.trim() || "새 현장 기록";
-  const fieldsNeedingReview = structureMeta?.needsReview ?? [];
+  const blankStructuredFields = REVIEW_FIELDS.filter((field) => !draft[field].trim());
+  const fieldsNeedingReview = Array.from(new Set([
+    ...(structureMeta?.needsReview ?? []),
+    ...blankStructuredFields,
+  ]));
   const latestNoIssueCheckIn = noIssueCheckIns[0];
-  const reflectionAnswersWithCurrent = [...reflectionAnswers];
-  reflectionAnswersWithCurrent[reflectionQuestionIndex] = transcript.trim();
-  const allReflectionAnswersAreNoIssue = reflectionAnswersWithCurrent.every(
-    (answer) => answer.trim() === "특이사항 없음",
-  );
 
   function updateDraftField<Field extends keyof DraftRecord>(
     field: Field,
@@ -563,31 +539,6 @@ export default function Workspace() {
   ) {
     setDraft((current) => ({ ...current, [field]: value }));
     setCriticalConfirmed(false);
-  }
-
-  function getReflectionAnswersWithCurrent(currentText = transcript) {
-    const nextAnswers = [...reflectionAnswers];
-    nextAnswers[reflectionQuestionIndex] = currentText.trim();
-    return nextAnswers;
-  }
-
-  function moveToReflectionQuestion(nextIndex: number) {
-    if (
-      nextIndex < 0 ||
-      nextIndex >= REFLECTION_QUESTIONS.length ||
-      recording ||
-      finalizingRecording ||
-      transcriptReviewRequired
-    ) {
-      return;
-    }
-    const nextAnswers = getReflectionAnswersWithCurrent();
-    setReflectionAnswers(nextAnswers);
-    setReflectionQuestionIndex(nextIndex);
-    setTranscript(nextAnswers[nextIndex] ?? "");
-    recognitionBaseTranscriptRef.current = nextAnswers[nextIndex] ?? "";
-    setAnalysisError("");
-    setSpeechNotice("");
   }
 
   function selectWorkOrder(workOrder: string) {
@@ -616,8 +567,6 @@ export default function Workspace() {
     setCaptureStage(0);
     setCompletionMode(null);
     setSeconds(0);
-    setReflectionQuestionIndex(0);
-    setReflectionAnswers(["", "", ""]);
     setTranscript("");
     setAnalysisError("");
     setSpeechNotice("");
@@ -645,7 +594,7 @@ export default function Workspace() {
 
   function confirmCaptureReset() {
     return !hasCaptureWorkInProgress() || window.confirm(
-      "작성 중인 3문항 답변과 구조화 초안을 지우고 이동할까요?",
+      "작성 중인 3분 회고 전사문과 구조화 초안을 지우고 이동할까요?",
     );
   }
 
@@ -672,8 +621,12 @@ export default function Workspace() {
 
   function startRecording() {
     if (finalizingRecording) return;
+    if (transcript.length >= MAX_TRANSCRIPT_CHARACTERS) {
+      setSpeechNotice("전사문 6,000자 한도에 도달했습니다. 내용을 줄인 뒤 다시 녹음해주세요.");
+      return;
+    }
     if (seconds >= 180) {
-      setSpeechNotice("전체 회고의 3분 녹음 한도를 사용했습니다. 남은 답변은 직접 입력해주세요.");
+      setSpeechNotice("한 번의 회고에 제공되는 3분 녹음 시간을 모두 사용했습니다. 빠진 내용은 전사문에 직접 입력해주세요.");
       return;
     }
     stopRecording();
@@ -696,17 +649,22 @@ export default function Workspace() {
     recognition.lang = "ko-KR";
     recognition.interimResults = true;
     recognition.continuous = true;
+    let transcriptLimitReached = false;
     recognition.onresult = (event) => {
-      if (recognitionRef.current !== recognition) return;
+      if (recognitionRef.current !== recognition || transcriptLimitReached) return;
       const nextTranscript = Array.from(event.results)
         .map((result) => result[0]?.transcript ?? "")
         .join(" ")
         .trim();
-      setTranscript(
-        [recognitionBaseTranscriptRef.current, nextTranscript]
-          .filter(Boolean)
-          .join("\n"),
-      );
+      const combinedTranscript = [recognitionBaseTranscriptRef.current, nextTranscript]
+        .filter(Boolean)
+        .join("\n");
+      setTranscript(combinedTranscript.slice(0, MAX_TRANSCRIPT_CHARACTERS));
+      if (combinedTranscript.length >= MAX_TRANSCRIPT_CHARACTERS) {
+        transcriptLimitReached = true;
+        setTranscriptReviewRequired(true);
+        finalizeRecording("전사문은 6,000자까지 보존되었고 초과 부분은 포함되지 않았습니다. 끝부분을 확인해주세요.");
+      }
     };
     recognition.onerror = () => {
       if (recognitionRef.current !== recognition) return;
@@ -729,9 +687,9 @@ export default function Workspace() {
         }
         setRecording(false);
         setFinalizingRecording(false);
-        if (recordingEndNoticeRef.current) {
-          setSpeechNotice(recordingEndNoticeRef.current);
-        }
+        const completionNotice = recordingEndNoticeRef.current;
+        recordingEndNoticeRef.current = "";
+        setSpeechNotice(completionNotice || "브라우저 음성 인식이 종료되었습니다. 이어서 말하기를 누르면 현재 내용 뒤에 계속 기록됩니다.");
       }
     };
     recognitionRef.current = recognition;
@@ -773,36 +731,31 @@ export default function Workspace() {
   function clearTranscriptForRestart() {
     if (
       transcript.trim() &&
-      !window.confirm("현재 질문의 답변을 모두 지울까요?")
+      !window.confirm("현재 3분 회고 전사문을 모두 지울까요?")
     ) {
       return;
     }
     stopRecording();
     recognitionBaseTranscriptRef.current = "";
-    setReflectionAnswers((current) => current.map((answer, index) => (
-      index === reflectionQuestionIndex ? "" : answer
-    )));
     setTranscript("");
     setAnalysisError("");
-    setSpeechNotice("현재 질문의 답변을 지웠습니다. 다시 녹음하거나 직접 입력하세요.");
+    setSpeechNotice("전체 회고 전사문을 지웠습니다. 다시 녹음하거나 직접 입력하세요.");
     setTranscriptReviewRequired(false);
   }
 
-  function completeNoIssuesReflection(answerOverride?: string[]) {
-    const currentAnswers = answerOverride ?? getReflectionAnswersWithCurrent();
-    const hasDetailedAnswer = currentAnswers.some(
-      (answer) => answer.trim() && answer.trim() !== "특이사항 없음",
+  function completeNoIssuesReflection() {
+    const hasDetailedAnswer = Boolean(
+      transcript.trim() && transcript.trim() !== "특이사항 없음",
     );
     if (
       hasDetailedAnswer &&
-      !window.confirm("작성 중인 답변 대신 오늘 전체를 ‘특이사항 없음’으로 완료할까요?")
+      !window.confirm("작성 중인 회고 전사문 대신 오늘 전체를 ‘특이사항 없음’으로 완료할까요?")
     ) {
       return;
     }
 
     stopRecording();
     cancelAnalysis();
-    const noIssueAnswers = REFLECTION_QUESTIONS.map(() => "특이사항 없음");
     const existingCheckIn = noIssueCheckIns.find((checkIn) => (
       checkIn.periodKey === DEMO_PERIOD_KEY &&
       checkIn.participantKey === DEMO_PARTICIPANT_KEY &&
@@ -825,8 +778,6 @@ export default function Workspace() {
 
     setNoIssueCheckIns(nextCheckIns);
     persistNoIssueCheckIns(nextCheckIns);
-    setReflectionAnswers(noIssueAnswers);
-    setReflectionQuestionIndex(REFLECTION_QUESTIONS.length - 1);
     setTranscript("특이사항 없음");
     recognitionBaseTranscriptRef.current = "";
     setTranscriptReviewRequired(false);
@@ -836,6 +787,37 @@ export default function Workspace() {
     setCriticalConfirmed(false);
     setCompletionMode("no-issues");
     setCaptureStage(3);
+  }
+
+  function confirmSampleReplacement() {
+    const currentTranscript = transcript.trim();
+    const transcriptWillChange = Boolean(currentTranscript && currentTranscript !== demoReflectionTranscript);
+    const contextWillChange = draft.workOrder !== DEMO_CONTEXT.workOrder;
+    if (!transcriptWillChange && !contextWillChange) return true;
+    return window.confirm(
+      "준비된 A모델 샘플에 맞춰 현재 작업 맥락과 회고 전사문을 교체할까요?",
+    );
+  }
+
+  function applyDemoContext() {
+    setDraft((current) => ({
+      ...current,
+      workOrder: DEMO_CONTEXT.workOrder,
+      product: DEMO_CONTEXT.product,
+      process: DEMO_CONTEXT.process,
+      equipment: DEMO_CONTEXT.equipment,
+    }));
+  }
+
+  function loadSampleTranscript() {
+    if (!confirmSampleReplacement()) return;
+    stopRecording();
+    recognitionBaseTranscriptRef.current = "";
+    setTranscriptReviewRequired(false);
+    applyDemoContext();
+    setTranscript(demoReflectionTranscript);
+    setAnalysisError("");
+    setSpeechNotice("한 번의 회고 샘플 전사문을 불러왔습니다. 실제 음성 인식 결과가 아닙니다.");
   }
 
   async function analyzeTranscript() {
@@ -848,24 +830,21 @@ export default function Workspace() {
       return;
     }
     stopRecording();
-    const nextAnswers = getReflectionAnswersWithCurrent();
-    const unansweredQuestion = nextAnswers.findIndex((answer) => !answer.trim());
-    if (unansweredQuestion >= 0) {
-      setAnalysisError(`${unansweredQuestion + 1}번째 질문에 답하거나 ‘특이사항 없음’을 선택해주세요.`);
+    const currentTranscript = transcript.trim();
+    if (!currentTranscript) {
+      setAnalysisError("한 번의 회고를 녹음하거나 전사문을 직접 입력해주세요.");
       return;
     }
-    if (nextAnswers.every((answer) => answer.trim() === "특이사항 없음")) {
-      completeNoIssuesReflection(nextAnswers);
+    if (currentTranscript === "특이사항 없음") {
+      completeNoIssuesReflection();
       return;
     }
-    const source = buildCombinedTranscript(nextAnswers, draft);
-    if (source.length > MAX_TRANSCRIPT_CHARACTERS) {
+    if (currentTranscript.length > MAX_TRANSCRIPT_CHARACTERS) {
       setAnalysisError(
-        `세 답변의 합산 길이가 ${MAX_TRANSCRIPT_CHARACTERS.toLocaleString()}자를 넘었습니다. 답변을 조금 줄여주세요.`,
+        `전체 회고 전사문이 ${MAX_TRANSCRIPT_CHARACTERS.toLocaleString()}자를 넘었습니다. 내용을 조금 줄여주세요.`,
       );
       return;
     }
-    setReflectionAnswers(nextAnswers);
 
     cancelAnalysis();
     const controller = new AbortController();
@@ -879,7 +858,7 @@ export default function Workspace() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transcript: source,
+          transcript: currentTranscript,
           process: draft.process,
           equipment: draft.equipment,
         }),
@@ -968,15 +947,12 @@ export default function Workspace() {
     }
   }
 
-  function continueWithSample(answerOverride?: string[]) {
+  function continueWithSample(transcriptOverride: string) {
+    if (!confirmSampleReplacement()) return;
     stopRecording();
     cancelAnalysis();
-    const nextAnswers = answerOverride ?? getReflectionAnswersWithCurrent();
-    setReflectionAnswers(nextAnswers);
-    if (answerOverride) {
-      setReflectionQuestionIndex(REFLECTION_QUESTIONS.length - 1);
-      setTranscript(answerOverride[REFLECTION_QUESTIONS.length - 1] ?? "");
-    }
+    applyDemoContext();
+    setTranscript(transcriptOverride);
     setTranscriptReviewRequired(false);
     setDraft((current) => ({
       ...current,
@@ -1014,7 +990,7 @@ export default function Workspace() {
       cause: draft.cause,
       action: draft.action,
       result: draft.result,
-      sourceAnswers: reflectionAnswers,
+      sourceAnswers: [transcript.trim()],
       author: "김민수",
       createdAt: "방금 전",
       status: "검토 대기",
@@ -1179,7 +1155,7 @@ export default function Workspace() {
             {captureStage === 0 && (
               <div className="capture-card context-card">
                 <span className="section-kicker">STEP 01</span><h2>어떤 작업에서 있었던 일인가요?</h2><p>작업지시·품목·공정·설비를 연결해 기록의 맥락을 먼저 고정합니다.</p>
-                <div className="demo-guide"><b>처음 체험하시나요?</b><span>QR 데모를 누른 뒤 다음 화면에서 ‘AI 없이 샘플 전체 흐름 체험’을 선택하세요.</span></div>
+                <div className="demo-guide"><b>처음 체험하시나요?</b><span>QR 데모를 누른 뒤 다음 화면에서 ‘AI 없이 한 번의 회고 샘플 체험’을 선택하세요.</span></div>
                 <button className="qr-button" type="button" onClick={() => { selectWorkOrder("WO-260818-042"); setToast("QR 데모: 작업지시·품목·공정·설비를 연결했습니다."); }}><span>▦</span><b>설비 QR 데모</b><small>WO-260818-042 · A모델 · AS-02 값을 함께 채웁니다</small></button>
                 <div className="or-line"><span>또는 직접 선택</span></div>
                 <p className="context-helper">한 항목을 선택하면 같은 작업에 연결된 나머지 값도 함께 채워집니다.</p>
@@ -1195,62 +1171,53 @@ export default function Workspace() {
 
             {captureStage === 1 && (
               <div className="capture-card record-card">
-                <div className="question-progress" aria-label="3문항 회고 진행 상황">
-                  {REFLECTION_QUESTIONS.map((questionItem, index) => {
-                    const answered = index === reflectionQuestionIndex
-                      ? Boolean(transcript.trim())
-                      : Boolean(reflectionAnswers[index]?.trim());
-                    return (
-                      <button
-                        type="button"
-                        key={questionItem.short}
-                        className={`${index === reflectionQuestionIndex ? "active" : ""} ${answered ? "complete" : ""}`}
-                        disabled={recording || finalizingRecording || processing || transcriptReviewRequired}
-                        onClick={() => moveToReflectionQuestion(index)}
-                        aria-current={index === reflectionQuestionIndex ? "step" : undefined}
-                      >
-                        <span>{answered && index !== reflectionQuestionIndex ? "✓" : index + 1}</span>
-                        <b>{questionItem.short.replace(/^Q\d\s/, "")}</b>
-                      </button>
-                    );
-                  })}
+                <span className="section-kicker">STEP 02 · 한 번의 3분 회고</span>
+                <h2>한 번에 편하게 말씀해주세요.</h2>
+                <p>순서에 맞춰 각각 답할 필요가 없습니다. AI는 전체 전사문에서 작업자가 실제로 말한 내용만 찾아 구조화합니다.</p>
+                <div className="reflection-guide" aria-labelledby="reflection-guide-title">
+                  <div className="reflection-guide-heading">
+                    <span>말하기 가이드 · 답변란 아님</span>
+                    <b id="reflection-guide-title">이 세 가지를 떠올리며 한 번에 말해보세요.</b>
+                    <small>해당 내용이 없으면 생략해도 됩니다. AI가 없는 답변을 만들어내지 않습니다.</small>
+                  </div>
+                  <div className="reflection-guide-grid">
+                    {REFLECTION_QUESTIONS.map((questionItem, index) => (
+                      <article key={questionItem.short}>
+                        <span aria-hidden="true">{index + 1}</span>
+                        <div><b>{questionItem.title}</b><small>{questionItem.helper}</small></div>
+                      </article>
+                    ))}
+                  </div>
                 </div>
-                <span className="section-kicker">STEP 02 · 질문 {reflectionQuestionIndex + 1}/3</span>
-                <h2>{REFLECTION_QUESTIONS[reflectionQuestionIndex].title}</h2>
-                <p>{REFLECTION_QUESTIONS[reflectionQuestionIndex].helper}</p>
                 <div className="record-context-summary"><span>{draft.workOrder}</span><b>{draft.product}</b><small>{draft.process} · {draft.equipment}</small></div>
                 <div className="ai-connection-status"><i aria-hidden="true" />결과 모드: 분석 전 · LIVE AI 또는 SAMPLE로 구분</div>
-                <div className="privacy-notice"><b>입력 전 확인</b><span>상시 녹음하지 않으며 개인평가에 사용하지 않습니다. 음성은 브라우저 음성 서비스에서 처리될 수 있습니다. 전사문은 OpenAI에 <code>store:false</code>로 전송되며 이 앱은 원음 파일을 저장하지 않습니다. 참여 완료 시 작업지시·품목·공정·설비·녹음시간을, 지식 저장 시 구조화 결과를 이 브라우저의 localStorage에 남깁니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</span></div>
-                <button className="no-issues-shortcut" type="button" disabled={processing || recording || finalizingRecording} onClick={() => completeNoIssuesReflection()}><span aria-hidden="true">✓</span><span className="no-issues-copy"><b>오늘 전체 특이사항 없음</b><small>세 질문을 한 번에 완료하고 참여만 기록합니다. AI와 승인함은 사용하지 않습니다.</small></span><i>바로 완료 →</i></button>
+                <div className="privacy-notice"><b>입력 전 확인</b><span>상시 녹음하지 않으며 개인평가에 사용하지 않습니다. 음성은 브라우저 음성 서비스에서 처리될 수 있습니다. 전사문은 OpenAI에 <code>store:false</code>로 전송되며 이 앱은 원음 파일을 저장하지 않습니다. 참여 완료 시 작업지시·품목·공정·설비·녹음시간을, 지식 저장 시 전사문과 구조화 결과를 이 브라우저의 localStorage에 남깁니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</span></div>
+                <button className="no-issues-shortcut" type="button" disabled={processing || recording || finalizingRecording} onClick={completeNoIssuesReflection}><span aria-hidden="true">✓</span><span className="no-issues-copy"><b>오늘 전체 특이사항 없음</b><small>회고를 바로 완료하고 참여만 기록합니다. AI와 승인함은 사용하지 않습니다.</small></span><i>바로 완료 →</i></button>
                 <div className={`recorder ${recording ? "recording" : ""} ${finalizingRecording ? "finalizing" : ""}`}>
-                  <button type="button" disabled={processing || finalizingRecording} aria-label={finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중지" : transcript.trim() ? "기존 내용에 이어 녹음" : "녹음 시작"} onClick={recording ? () => finalizeRecording("녹음을 종료했습니다. 기존 입력은 보존되며 다시 누르면 뒤에 이어집니다.") : startRecording}><i /><span>{finalizingRecording ? "마무리 중" : recording ? "멈추기" : transcript.trim() ? "이어서 말하기" : "눌러서 말하기"}</span></button>
+                  <button type="button" disabled={processing || finalizingRecording} aria-pressed={recording} aria-label={finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중지" : transcript.trim() ? "기존 내용에 이어 녹음" : "녹음 시작"} onClick={recording ? () => finalizeRecording("녹음을 종료했습니다. 기존 입력은 보존되며 다시 누르면 뒤에 이어집니다.") : startRecording}><i /><span>{finalizingRecording ? "마무리 중" : recording ? "멈추기" : transcript.trim() ? "이어서 말하기" : "눌러서 말하기"}</span></button>
                   <div className="recorder-wave" aria-hidden="true">
                     {[14, 30, 22, 43, 18, 36, 26, 49, 32, 17, 40, 24, 34, 16, 29, 45, 21, 33, 15].map((height, index) => <i key={index} style={{ height: recording ? `${height}px` : "4px", animationDelay: `${index * 45}ms` }} />)}
                   </div>
-                  <strong>{String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")}</strong><small>3문항 합계 최대 03:00</small>
+                  <strong>{String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")}</strong><small>한 번의 회고 · 최대 03:00</small>
                 </div>
                 {transcript.trim() && !recording && !finalizingRecording && <p className="transcript-append-note">추가 녹음은 현재 내용 뒤에 새 줄로 이어집니다.</p>}
-                <label className="transcript-field"><span>Q{reflectionQuestionIndex + 1} 답변 <small>{finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중 자동 갱신" : `직접 수정 가능 · ${transcript.length.toLocaleString()}/${MAX_ANSWER_CHARACTERS.toLocaleString()}자`}</small></span><textarea maxLength={MAX_ANSWER_CHARACTERS} readOnly={recording || finalizingRecording} value={transcript} onChange={(event) => { setTranscript(event.target.value); setAnalysisError(""); setSpeechNotice(""); }} placeholder={REFLECTION_QUESTIONS[reflectionQuestionIndex].placeholder} /></label>
-                <div className="transcript-tools">
+                <label className="transcript-field"><span>3분 회고 전체 전사문 <small>{finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중 자동 갱신" : `직접 수정 가능 · ${transcript.length.toLocaleString()}/${MAX_TRANSCRIPT_CHARACTERS.toLocaleString()}자`}</small></span><textarea maxLength={MAX_TRANSCRIPT_CHARACTERS} readOnly={recording || finalizingRecording} value={transcript} onChange={(event) => { setTranscript(event.target.value); setAnalysisError(""); setSpeechNotice(""); }} placeholder="예: 오늘 A모델 50개 중 3개에서 누설이 났습니다. 실링 고무가 안쪽으로 밀려 있어 다시 끼우고 검사하니 모두 통과했습니다. 다음 작업자는 실링 위치를 먼저 확인해주세요." /></label>
+                <div className="transcript-tools" aria-live="polite">
                   {speechNotice && <p role="status">{speechNotice}</p>}
-                  <div><button type="button" disabled={processing || finalizingRecording} onClick={() => { stopRecording(); recognitionBaseTranscriptRef.current = ""; setTranscriptReviewRequired(false); setTranscript(demoReflectionAnswers[reflectionQuestionIndex]); setSpeechNotice("현재 질문의 샘플 답변을 불러왔습니다. 실제 음성 인식 결과가 아닙니다."); }}>이 질문 샘플 답변</button><button type="button" disabled={processing || finalizingRecording} onClick={() => { stopRecording(); recognitionBaseTranscriptRef.current = ""; setTranscriptReviewRequired(false); setTranscript("특이사항 없음"); setSpeechNotice("이 질문을 ‘특이사항 없음’으로 기록했습니다."); }}>특이사항 없음</button>{transcript.trim() && <button className="reset-transcript" type="button" disabled={processing || finalizingRecording} onClick={clearTranscriptForRestart}>이 답변 지우기</button>}</div>
+                  <div><button type="button" disabled={processing || recording || finalizingRecording} onClick={loadSampleTranscript}>전체 회고 샘플 불러오기</button>{transcript.trim() && <button className="reset-transcript" type="button" disabled={processing || recording || finalizingRecording} onClick={clearTranscriptForRestart}>전사문 지우기</button>}</div>
                 </div>
                 {transcriptReviewRequired && <div className="transcript-review-warning" role="alert"><p><b>마지막 문장을 확인해주세요.</b><span>음성 종료가 정상 확인되지 않아 끝부분이 누락됐을 수 있습니다.</span></p><button type="button" onClick={() => { setTranscriptReviewRequired(false); setAnalysisError(""); setSpeechNotice("전사문 확인을 완료했습니다."); }}>전사문 확인 완료</button></div>}
-                <button className="sample-flow-shortcut" type="button" disabled={processing || finalizingRecording} onClick={() => { setSpeechNotice("AI를 사용하지 않는 3문항 샘플 흐름입니다."); continueWithSample([...demoReflectionAnswers]); }}><b>AI 없이 3문항 샘플 전체 흐름 체험</b><span>세 답변을 채우고 검토·저장·승인 단계로 바로 이동합니다. →</span></button>
+                <button className="sample-flow-shortcut" type="button" disabled={processing || recording || finalizingRecording} onClick={() => { setSpeechNotice("AI를 사용하지 않는 한 번의 회고 샘플 흐름입니다."); continueWithSample(demoReflectionTranscript); }}><b>AI 없이 한 번의 회고 샘플 체험</b><span>준비된 A모델 작업 맥락·전체 전사문·구조화 결과로 검토·저장·승인을 체험합니다. →</span></button>
                 {processing && <div className="analysis-status" role="status">AI가 현장 기록을 분석하고 있습니다. 잠시만 기다려주세요.</div>}
                 {analysisError && (
                   <div className="analysis-error" role="alert">
                     <div><b>실제 AI 구조화에 실패했습니다.</b><p>{analysisError}</p></div>
-                    <button type="button" onClick={() => continueWithSample()}>샘플 결과로 계속</button>
+                    <button type="button" onClick={() => continueWithSample(demoReflectionTranscript)}>준비된 A모델 샘플로 전환</button>
                   </div>
                 )}
                 <div className="button-row">
-                  <button className="ghost-action" type="button" disabled={recording || finalizingRecording || processing} onClick={() => reflectionQuestionIndex === 0 ? returnToContextSelection() : moveToReflectionQuestion(reflectionQuestionIndex - 1)}>← {reflectionQuestionIndex === 0 ? "현장 선택" : "이전 질문"}</button>
-                  {reflectionQuestionIndex < REFLECTION_QUESTIONS.length - 1 ? (
-                    <button className="wide-primary inline" type="button" disabled={recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={() => moveToReflectionQuestion(reflectionQuestionIndex + 1)}>다음 질문 {reflectionQuestionIndex + 2}/3 <span>→</span></button>
-                  ) : (
-                    <button className="wide-primary inline" type="button" disabled={processing || recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={analyzeTranscript}>{finalizingRecording ? "마지막 음성 반영 중…" : transcriptReviewRequired ? "전사문 확인 필요" : processing ? "AI가 구조화하는 중…" : allReflectionAnswersAreNoIssue ? "특이사항 없음으로 회고 완료" : "3문항을 AI로 정리"}<span>→</span></button>
-                  )}
+                  <button className="ghost-action" type="button" disabled={recording || finalizingRecording || processing} onClick={returnToContextSelection}>← 현장 선택</button>
+                  <button className="wide-primary inline" type="button" disabled={processing || recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={analyzeTranscript}>{finalizingRecording ? "마지막 음성 반영 중…" : transcriptReviewRequired ? "전사문 확인 필요" : processing ? "AI가 구조화하는 중…" : transcript.trim() === "특이사항 없음" ? "특이사항 없음으로 회고 완료" : "전체 회고를 AI로 정리"}<span>→</span></button>
                 </div>
               </div>
             )}
@@ -1266,21 +1233,22 @@ export default function Workspace() {
                 </div>
                 {fieldsNeedingReview.length > 0 && <div className="review-field-list"><b>확인 대상</b>{fieldsNeedingReview.map((field) => <span key={field}>{REVIEW_FIELD_LABELS[field]}</span>)}</div>}
                 <details className="reflection-source" open>
-                  <summary>작업자 3문항 원문 다시 보기</summary>
-                  <ol>{REFLECTION_QUESTIONS.map((questionItem, index) => <li key={questionItem.short}><b>{questionItem.short}</b><p>{reflectionAnswers[index] || "특이사항 없음"}</p></li>)}</ol>
+                  <summary>작업자 3분 회고 원문 다시 보기</summary>
+                  <div className="reflection-transcript"><p>{transcript.trim() || "언급 없음"}</p><small>세 질문은 별도 답변란이 아닌 말하기 가이드입니다.</small></div>
                 </details>
+                <div className="structure-boundary-note"><b>AI는 작업자의 답을 대신 만들지 않습니다.</b><span>원문에 없는 값은 비워두고 ‘언급 없음 · 확인 필요’로 표시합니다. 작업자가 확인한 뒤에만 저장됩니다.</span></div>
                 <div className="draft-form">
                   <label className={fieldsNeedingReview.includes("kind") ? "critical" : undefined}><span>기록 유형 {fieldsNeedingReview.includes("kind") && <b>확인 필요</b>}</span><select value={draft.kind} onChange={(event) => updateDraftField("kind", event.target.value as KnowledgeCard["kind"])}><option>문제</option><option>개선</option><option>노하우</option></select></label>
                   <label><span>작업지시 <b className="worker-confirmed">작업자 선택 · 고정</b></span><input readOnly value={draft.workOrder} /></label>
                   <label><span>품목 <b className="worker-confirmed">작업자 선택 · 고정</b></span><input readOnly value={draft.product} /></label>
                   <label className={fieldsNeedingReview.includes("process") ? "critical" : undefined}><span>공정 <b className="worker-confirmed">작업자 선택 · 고정</b></span><input readOnly value={draft.process} /></label>
                   <label className={fieldsNeedingReview.includes("equipment") ? "critical" : undefined}><span>설비·라인 <b className="worker-confirmed">작업자 선택 · 고정</b></span><input readOnly value={draft.equipment} /></label>
-                  <label className={fieldsNeedingReview.includes("quantity") ? "critical" : undefined}><span>작업 수량 {fieldsNeedingReview.includes("quantity") && <b>확인 필요</b>}</span><input value={draft.quantity} onChange={(event) => updateDraftField("quantity", event.target.value)} /></label>
-                  <label className={fieldsNeedingReview.includes("defect") ? "critical" : undefined}><span>불량 수량 {fieldsNeedingReview.includes("defect") && <b>확인 필요</b>}</span><input value={draft.defect} onChange={(event) => updateDraftField("defect", event.target.value)} /></label>
-                  <label className={`full ${fieldsNeedingReview.includes("symptom") ? "critical" : ""}`}><span>증상 {fieldsNeedingReview.includes("symptom") && <b>확인 필요</b>}</span><input value={draft.symptom} onChange={(event) => updateDraftField("symptom", event.target.value)} /></label>
-                  <label className={`full ${fieldsNeedingReview.includes("cause") ? "critical" : ""}`}><span>원인 가설 {fieldsNeedingReview.includes("cause") && <b>확인 필요</b>} <small>승인 전에는 사실로 확정되지 않습니다</small></span><textarea value={draft.cause} onChange={(event) => updateDraftField("cause", event.target.value)} /></label>
-                  <label className={`full ${fieldsNeedingReview.includes("action") ? "critical" : ""}`}><span>조치 {fieldsNeedingReview.includes("action") && <b>확인 필요</b>}</span><textarea value={draft.action} onChange={(event) => updateDraftField("action", event.target.value)} /></label>
-                  <label className={`full ${fieldsNeedingReview.includes("result") ? "critical" : ""}`}><span>결과 {fieldsNeedingReview.includes("result") && <b>확인 필요</b>}</span><input value={draft.result} onChange={(event) => updateDraftField("result", event.target.value)} /></label>
+                  <label className={fieldsNeedingReview.includes("quantity") ? "critical" : undefined}><span>작업 수량 {fieldsNeedingReview.includes("quantity") && <b>확인 필요</b>}</span><input placeholder="언급 없음 · 확인 필요" value={draft.quantity} onChange={(event) => updateDraftField("quantity", event.target.value)} /></label>
+                  <label className={fieldsNeedingReview.includes("defect") ? "critical" : undefined}><span>불량 수량 {fieldsNeedingReview.includes("defect") && <b>확인 필요</b>}</span><input placeholder="언급 없음 · 확인 필요" value={draft.defect} onChange={(event) => updateDraftField("defect", event.target.value)} /></label>
+                  <label className={`full ${fieldsNeedingReview.includes("symptom") ? "critical" : ""}`}><span>증상 {fieldsNeedingReview.includes("symptom") && <b>확인 필요</b>}</span><input placeholder="언급 없음 · 확인 필요" value={draft.symptom} onChange={(event) => updateDraftField("symptom", event.target.value)} /></label>
+                  <label className={`full ${fieldsNeedingReview.includes("cause") ? "critical" : ""}`}><span>원인 가설 {fieldsNeedingReview.includes("cause") && <b>확인 필요</b>} <small>승인 전에는 사실로 확정되지 않습니다</small></span><textarea placeholder="언급 없음 · 확인 필요" value={draft.cause} onChange={(event) => updateDraftField("cause", event.target.value)} /></label>
+                  <label className={`full ${fieldsNeedingReview.includes("action") ? "critical" : ""}`}><span>조치 {fieldsNeedingReview.includes("action") && <b>확인 필요</b>}</span><textarea placeholder="언급 없음 · 확인 필요" value={draft.action} onChange={(event) => updateDraftField("action", event.target.value)} /></label>
+                  <label className={`full ${fieldsNeedingReview.includes("result") ? "critical" : ""}`}><span>결과 {fieldsNeedingReview.includes("result") && <b>확인 필요</b>}</span><input placeholder="언급 없음 · 확인 필요" value={draft.result} onChange={(event) => updateDraftField("result", event.target.value)} /></label>
                 </div>
                 {missingRequiredFields.length > 0 && <p className="required-field-warning" role="alert">이 기록 유형의 필수 입력: {missingRequiredFields.map((field) => DRAFT_FIELD_LABELS[field]).join(", ")}</p>}
                 {numericValidationError && <p className="required-field-warning" role="alert">{numericValidationError}</p>}
@@ -1327,7 +1295,7 @@ export default function Workspace() {
               {selectedCard && (
                 <article className="review-detail">
                   <header><div><span className={`kind-mark ${selectedCard.kind}`}>{selectedCard.kind}</span><span>#{selectedCard.id}</span></div><h2>{selectedCard.title}</h2><p>{selectedCard.workOrder} · {selectedCard.product}<br />{selectedCard.equipment} · {selectedCard.author} · {selectedCard.createdAt}</p></header>
-                  <div className="source-block"><span>작업자 3문항 원문</span><ol>{REFLECTION_QUESTIONS.map((questionItem, index) => <li key={questionItem.short}><b>{questionItem.short}</b><p>{selectedCard.sourceAnswers[index] || "특이사항 없음"}</p></li>)}</ol><small>{selectedCard.structureMode === "live" ? "LIVE AI 구조화" : "SAMPLE · AI 미사용"} · 브라우저에 저장된 결과 · 원음 파일은 앱에 저장하지 않음</small></div>
+                  <div className="source-block"><span>작업자 3분 회고 원문</span><div className="source-transcript"><p>{selectedCard.sourceAnswers.filter((source) => source.trim()).join("\n\n") || "언급 없음"}</p></div><small>{selectedCard.structureMode === "live" ? "LIVE AI 구조화" : "SAMPLE · AI 미사용"} · 브라우저에 저장된 결과 · 원음 파일은 앱에 저장하지 않음</small></div>
                   <dl className="knowledge-fields">
                     <div><dt>상황·증상</dt><dd>{selectedCard.symptom}</dd></div><div><dt>원인 가설</dt><dd>{selectedCard.cause}<small>관리자 확인 필요</small></dd></div><div><dt>실행한 조치</dt><dd>{selectedCard.action}</dd></div><div><dt>확인된 결과</dt><dd>{selectedCard.result}</dd></div>
                   </dl>

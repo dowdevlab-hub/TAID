@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const MAX_API_BODY_BYTES = 32_000;
+const MAX_API_BODY_BYTES = 64_000;
 
 async function loadWorker() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -75,15 +75,19 @@ test("server-renders the interactive MVP workspace", async () => {
   assert.doesNotMatch(html, /LIVE AI 구조화|RULE DEMO/);
 });
 
-test("keeps explicit three-question and demo mode labels in conditional workspace views", async () => {
+test("keeps single-session guidance and demo mode labels in conditional workspace views", async () => {
   const source = await readFile(
     new URL("../app/app/Workspace.tsx", import.meta.url),
     "utf8",
   );
 
-  assert.match(source, /aria-label="3문항 회고 진행 상황"/);
-  assert.match(source, /AI 없이 3문항 샘플 전체 흐름 체험/);
-  assert.match(source, /작업자 3문항 원문/);
+  assert.match(source, /STEP 02 · 한 번의 3분 회고/);
+  assert.match(source, /말하기 가이드 · 답변란 아님/);
+  assert.match(source, /각각 답할 필요가 없습니다/);
+  assert.match(source, /3분 회고 전체 전사문/);
+  assert.match(source, /AI 없이 한 번의 회고 샘플 체험/);
+  assert.match(source, /전체 회고를 AI로 정리/);
+  assert.match(source, /작업자 3분 회고 원문/);
   assert.match(source, /LIVE AI/);
   assert.match(source, /SAMPLE · AI 미사용/);
   assert.match(source, /RULE DEMO · RAG 아님/);
@@ -92,8 +96,16 @@ test("keeps explicit three-question and demo mode labels in conditional workspac
   assert.match(source, /관리자 승인과 지식 카드는 생성되지 않습니다/);
   assert.match(source, /NO ISSUE · AI 미사용/);
   assert.match(source, /작업지시·품목·공정·설비·녹음시간/);
+  assert.match(source, /sourceAnswers: \[transcript\.trim\(\)\]/);
+  assert.match(source, /transcript: currentTranscript/);
+  assert.doesNotMatch(source, /buildCombinedTranscript/);
+  assert.equal([...source.matchAll(/fetch\("\/api\/structure"/g)].length, 1);
   assert.match(source, /checkIn\.periodKey === DEMO_PERIOD_KEY/);
   assert.match(source, /checkIn\.workOrder === draft\.workOrder/);
+  assert.doesNotMatch(
+    source,
+    /aria-label="3문항 회고 진행 상황"|AI 없이 3문항 샘플 전체 흐름 체험|작업자 3문항 원문|3문항을 AI로 정리/,
+  );
 });
 
 test("allows only POST for structure requests", async () => {
@@ -168,7 +180,7 @@ test("rejects an oversized body when content-length is absent", async () => {
     new Request("http://localhost/api/structure", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: "x".repeat(8_001),
+      body: "x".repeat(16_001),
     }),
   );
 
