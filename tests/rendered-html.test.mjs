@@ -81,18 +81,21 @@ test("keeps single-session guidance and demo mode labels in conditional workspac
     "utf8",
   );
 
-  assert.match(source, /STEP 02 · 한 번의 3분 회고/);
-  assert.match(source, /말하기 가이드 · 답변란 아님/);
-  assert.match(source, /각각 답할 필요가 없습니다/);
+  assert.match(source, /STEP 02 · 3분 회고/);
+  assert.match(source, /aria-label="말하기 가이드"/);
+  assert.match(source, /아래 질문은 말하기 힌트입니다/);
   assert.match(source, /3분 회고 전체 전사문/);
-  assert.match(source, /AI 없이 한 번의 회고 샘플 체험/);
+  assert.match(source, /마이크 없이 샘플로 체험/);
+  assert.match(source, /<details className="privacy-notice">/);
+  assert.match(source, /개인정보·기밀정보는 말하지 마세요\. 이 앱은 원음 파일을 저장하지 않습니다/);
+  assert.match(source, /녹음·전사 데이터 처리 방식/);
   assert.match(source, /전체 회고를 AI로 정리/);
   assert.match(source, /작업자 3분 회고 원문/);
   assert.match(source, /LIVE AI/);
   assert.match(source, /SAMPLE · AI 미사용/);
   assert.match(source, /RULE DEMO · RAG 아님/);
-  assert.match(source, /오늘 전체 특이사항 없음/);
-  assert.match(source, /참여만 기록합니다\. AI와 승인함은 사용하지 않습니다/);
+  assert.doesNotMatch(source, /오늘 전체.*특이사항 없음/);
+  assert.match(source, /이 작업은 특이사항 없음/);
   assert.match(source, /관리자 승인과 지식 카드는 생성되지 않습니다/);
   assert.match(source, /NO ISSUE · AI 미사용/);
   assert.match(source, /작업지시·품목·공정·설비·녹음시간/);
@@ -104,7 +107,7 @@ test("keeps single-session guidance and demo mode labels in conditional workspac
   assert.match(source, /checkIn\.workOrder === draft\.workOrder/);
   assert.doesNotMatch(
     source,
-    /aria-label="3문항 회고 진행 상황"|AI 없이 3문항 샘플 전체 흐름 체험|작업자 3문항 원문|3문항을 AI로 정리/,
+    /aria-label="3문항 회고 진행 상황"|AI 없이 3문항 샘플 전체 흐름 체험|AI 없이 한 번의 회고 샘플 체험|작업자 3문항 원문|3문항을 AI로 정리|전체 회고 샘플 불러오기|sample-flow-shortcut|ai-connection-status/,
   );
 });
 

@@ -115,21 +115,9 @@ const DEMO_PERIOD_KEY = "pilot-week-4";
 const DEMO_PARTICIPANT_KEY = "demo-worker-01";
 
 const REFLECTION_QUESTIONS = [
-  {
-    short: "Q1 어려웠던 점",
-    title: "오늘 가장 어려웠던 점은 무엇인가요?",
-    helper: "작업·불량 수량과 어떤 현상이 있었는지 함께 말해주세요.",
-  },
-  {
-    short: "Q2 새로 알게 된 점",
-    title: "오늘 새롭게 알게 된 것이 있나요?",
-    helper: "원인으로 추정한 내용과 확인 과정이 있다면 말해주세요.",
-  },
-  {
-    short: "Q3 다음 작업자에게",
-    title: "다음 사람에게 주고 싶은 한마디는?",
-    helper: "실행한 조치, 확인된 결과와 다음 작업자가 볼 점을 말해주세요.",
-  },
+  "오늘 가장 어려웠던 점",
+  "오늘 새롭게 알게 된 점",
+  "다음 사람에게 주고 싶은 한마디",
 ] as const;
 
 const demoReflectionAnswers = [
@@ -349,6 +337,7 @@ export default function Workspace() {
   const recordingEndNoticeRef = useRef("");
   const analysisControllerRef = useRef<AbortController | null>(null);
   const allowDocumentNavigationRef = useRef(false);
+  const recordStageRef = useRef<HTMLDivElement | null>(null);
 
   const finalizeRecording = useCallback((completionNotice: string) => {
     const recognition = recognitionRef.current;
@@ -473,6 +462,15 @@ export default function Workspace() {
     const timer = window.setTimeout(() => setToast(""), 2600);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (captureStage !== 1) return;
+    const frame = window.requestAnimationFrame(() => {
+      recordStageRef.current?.scrollIntoView({ block: "start" });
+      recordStageRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [captureStage]);
 
   const captureWorkInProgress = view === "capture" && captureStage > 0 && captureStage < 3 && Boolean(
     transcript.trim() ||
@@ -749,7 +747,7 @@ export default function Workspace() {
     );
     if (
       hasDetailedAnswer &&
-      !window.confirm("작성 중인 회고 전사문 대신 오늘 전체를 ‘특이사항 없음’으로 완료할까요?")
+      !window.confirm("작성 중인 회고 전사문 대신 이 작업을 ‘특이사항 없음’으로 완료할까요?")
     ) {
       return;
     }
@@ -807,17 +805,6 @@ export default function Workspace() {
       process: DEMO_CONTEXT.process,
       equipment: DEMO_CONTEXT.equipment,
     }));
-  }
-
-  function loadSampleTranscript() {
-    if (!confirmSampleReplacement()) return;
-    stopRecording();
-    recognitionBaseTranscriptRef.current = "";
-    setTranscriptReviewRequired(false);
-    applyDemoContext();
-    setTranscript(demoReflectionTranscript);
-    setAnalysisError("");
-    setSpeechNotice("한 번의 회고 샘플 전사문을 불러왔습니다. 실제 음성 인식 결과가 아닙니다.");
   }
 
   async function analyzeTranscript() {
@@ -1155,7 +1142,7 @@ export default function Workspace() {
             {captureStage === 0 && (
               <div className="capture-card context-card">
                 <span className="section-kicker">STEP 01</span><h2>어떤 작업에서 있었던 일인가요?</h2><p>작업지시·품목·공정·설비를 연결해 기록의 맥락을 먼저 고정합니다.</p>
-                <div className="demo-guide"><b>처음 체험하시나요?</b><span>QR 데모를 누른 뒤 다음 화면에서 ‘AI 없이 한 번의 회고 샘플 체험’을 선택하세요.</span></div>
+                <div className="demo-guide"><b>처음 체험하시나요?</b><span>QR 데모를 누른 뒤 다음 화면에서 ‘마이크 없이 샘플로 체험’을 선택하세요.</span></div>
                 <button className="qr-button" type="button" onClick={() => { selectWorkOrder("WO-260818-042"); setToast("QR 데모: 작업지시·품목·공정·설비를 연결했습니다."); }}><span>▦</span><b>설비 QR 데모</b><small>WO-260818-042 · A모델 · AS-02 값을 함께 채웁니다</small></button>
                 <div className="or-line"><span>또는 직접 선택</span></div>
                 <p className="context-helper">한 항목을 선택하면 같은 작업에 연결된 나머지 값도 함께 채워집니다.</p>
@@ -1170,29 +1157,22 @@ export default function Workspace() {
             )}
 
             {captureStage === 1 && (
-              <div className="capture-card record-card">
-                <span className="section-kicker">STEP 02 · 한 번의 3분 회고</span>
-                <h2>한 번에 편하게 말씀해주세요.</h2>
-                <p>순서에 맞춰 각각 답할 필요가 없습니다. AI는 전체 전사문에서 작업자가 실제로 말한 내용만 찾아 구조화합니다.</p>
-                <div className="reflection-guide" aria-labelledby="reflection-guide-title">
-                  <div className="reflection-guide-heading">
-                    <span>말하기 가이드 · 답변란 아님</span>
-                    <b id="reflection-guide-title">이 세 가지를 떠올리며 한 번에 말해보세요.</b>
-                    <small>해당 내용이 없으면 생략해도 됩니다. AI가 없는 답변을 만들어내지 않습니다.</small>
-                  </div>
+              <div ref={recordStageRef} tabIndex={-1} role="region" className="capture-card record-card" aria-labelledby="record-stage-title">
+                <span className="section-kicker">STEP 02 · 3분 회고</span>
+                <h2 id="record-stage-title">한 번에 말씀해주세요.</h2>
+                <p>아래 질문은 말하기 힌트입니다. 해당 없는 내용은 생략해도 됩니다.</p>
+                <div className="reflection-guide" aria-label="말하기 가이드">
                   <div className="reflection-guide-grid">
-                    {REFLECTION_QUESTIONS.map((questionItem, index) => (
-                      <article key={questionItem.short}>
+                    {REFLECTION_QUESTIONS.map((question, index) => (
+                      <article key={question}>
                         <span aria-hidden="true">{index + 1}</span>
-                        <div><b>{questionItem.title}</b><small>{questionItem.helper}</small></div>
+                        <b>{question}</b>
                       </article>
                     ))}
                   </div>
                 </div>
-                <div className="record-context-summary"><span>{draft.workOrder}</span><b>{draft.product}</b><small>{draft.process} · {draft.equipment}</small></div>
-                <div className="ai-connection-status"><i aria-hidden="true" />결과 모드: 분석 전 · LIVE AI 또는 SAMPLE로 구분</div>
-                <div className="privacy-notice"><b>입력 전 확인</b><span>상시 녹음하지 않으며 개인평가에 사용하지 않습니다. 음성은 브라우저 음성 서비스에서 처리될 수 있습니다. 전사문은 OpenAI에 <code>store:false</code>로 전송되며 이 앱은 원음 파일을 저장하지 않습니다. 참여 완료 시 작업지시·품목·공정·설비·녹음시간을, 지식 저장 시 전사문과 구조화 결과를 이 브라우저의 localStorage에 남깁니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</span></div>
-                <button className="no-issues-shortcut" type="button" disabled={processing || recording || finalizingRecording} onClick={completeNoIssuesReflection}><span aria-hidden="true">✓</span><span className="no-issues-copy"><b>오늘 전체 특이사항 없음</b><small>회고를 바로 완료하고 참여만 기록합니다. AI와 승인함은 사용하지 않습니다.</small></span><i>바로 완료 →</i></button>
+                <div className="record-context-summary" aria-label="선택한 작업"><span>{draft.workOrder}</span><b>{draft.product}</b><small>{draft.process} · {draft.equipment}</small></div>
+                <p className="recording-safety-note">개인정보·기밀정보는 말하지 마세요. 이 앱은 원음 파일을 저장하지 않습니다.</p>
                 <div className={`recorder ${recording ? "recording" : ""} ${finalizingRecording ? "finalizing" : ""}`}>
                   <button type="button" disabled={processing || finalizingRecording} aria-pressed={recording} aria-label={finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중지" : transcript.trim() ? "기존 내용에 이어 녹음" : "녹음 시작"} onClick={recording ? () => finalizeRecording("녹음을 종료했습니다. 기존 입력은 보존되며 다시 누르면 뒤에 이어집니다.") : startRecording}><i /><span>{finalizingRecording ? "마무리 중" : recording ? "멈추기" : transcript.trim() ? "이어서 말하기" : "눌러서 말하기"}</span></button>
                   <div className="recorder-wave" aria-hidden="true">
@@ -1200,14 +1180,21 @@ export default function Workspace() {
                   </div>
                   <strong>{String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")}</strong><small>한 번의 회고 · 최대 03:00</small>
                 </div>
+                <div className="record-secondary-actions">
+                  <button className="sample-shortcut" type="button" disabled={processing || recording || finalizingRecording} onClick={() => { setSpeechNotice("AI를 사용하지 않는 한 번의 회고 샘플 흐름입니다."); continueWithSample(demoReflectionTranscript); }}><span aria-hidden="true">◇</span><b>마이크 없이 샘플로 체험</b><i>SAMPLE · AI 미사용</i></button>
+                  <button className="no-issues-shortcut" type="button" disabled={processing || recording || finalizingRecording} onClick={completeNoIssuesReflection}><span aria-hidden="true">✓</span><b>이 작업은 특이사항 없음</b><i>바로 완료 →</i></button>
+                </div>
+                <details className="privacy-notice">
+                  <summary><span>녹음·전사 데이터 처리 방식</span><i>자세히</i></summary>
+                  <p>이 프로토타입에는 개인평가 기능이 없습니다. 음성은 브라우저 음성 서비스에서 처리될 수 있고, LIVE 분석 시 전사문은 OpenAI에 <code>store:false</code>로 전송됩니다. 참여 완료 시 작업지시·품목·공정·설비·녹음시간을, 지식 저장 시 전사문과 구조화 결과를 이 브라우저의 localStorage에 남깁니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</p>
+                </details>
                 {transcript.trim() && !recording && !finalizingRecording && <p className="transcript-append-note">추가 녹음은 현재 내용 뒤에 새 줄로 이어집니다.</p>}
                 <label className="transcript-field"><span>3분 회고 전체 전사문 <small>{finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중 자동 갱신" : `직접 수정 가능 · ${transcript.length.toLocaleString()}/${MAX_TRANSCRIPT_CHARACTERS.toLocaleString()}자`}</small></span><textarea maxLength={MAX_TRANSCRIPT_CHARACTERS} readOnly={recording || finalizingRecording} value={transcript} onChange={(event) => { setTranscript(event.target.value); setAnalysisError(""); setSpeechNotice(""); }} placeholder="예: 오늘 A모델 50개 중 3개에서 누설이 났습니다. 실링 고무가 안쪽으로 밀려 있어 다시 끼우고 검사하니 모두 통과했습니다. 다음 작업자는 실링 위치를 먼저 확인해주세요." /></label>
                 <div className="transcript-tools" aria-live="polite">
                   {speechNotice && <p role="status">{speechNotice}</p>}
-                  <div><button type="button" disabled={processing || recording || finalizingRecording} onClick={loadSampleTranscript}>전체 회고 샘플 불러오기</button>{transcript.trim() && <button className="reset-transcript" type="button" disabled={processing || recording || finalizingRecording} onClick={clearTranscriptForRestart}>전사문 지우기</button>}</div>
+                  <div>{transcript.trim() && <button className="reset-transcript" type="button" disabled={processing || recording || finalizingRecording} onClick={clearTranscriptForRestart}>전사문 지우기</button>}</div>
                 </div>
                 {transcriptReviewRequired && <div className="transcript-review-warning" role="alert"><p><b>마지막 문장을 확인해주세요.</b><span>음성 종료가 정상 확인되지 않아 끝부분이 누락됐을 수 있습니다.</span></p><button type="button" onClick={() => { setTranscriptReviewRequired(false); setAnalysisError(""); setSpeechNotice("전사문 확인을 완료했습니다."); }}>전사문 확인 완료</button></div>}
-                <button className="sample-flow-shortcut" type="button" disabled={processing || recording || finalizingRecording} onClick={() => { setSpeechNotice("AI를 사용하지 않는 한 번의 회고 샘플 흐름입니다."); continueWithSample(demoReflectionTranscript); }}><b>AI 없이 한 번의 회고 샘플 체험</b><span>준비된 A모델 작업 맥락·전체 전사문·구조화 결과로 검토·저장·승인을 체험합니다. →</span></button>
                 {processing && <div className="analysis-status" role="status">AI가 현장 기록을 분석하고 있습니다. 잠시만 기다려주세요.</div>}
                 {analysisError && (
                   <div className="analysis-error" role="alert">
@@ -1264,7 +1251,7 @@ export default function Workspace() {
                   <>
                     <span className="section-kicker">CHECK-IN SAVED</span><h2>오늘 회고를 완료했습니다.</h2><p>특이사항 없음으로 참여만 기록했습니다. 관리자 승인과 지식 카드는 생성되지 않습니다.</p>
                     <div className="saved-mode no-issues">NO ISSUE · AI 미사용</div>
-                    <div className="saved-summary"><span className="no-issue-summary-mark">✓</span><div><b>오늘 전체 특이사항 없음</b><small>{latestNoIssueCheckIn?.workOrder ?? draft.workOrder} · {latestNoIssueCheckIn?.product ?? draft.product}<br />{latestNoIssueCheckIn?.equipment ?? draft.equipment} · {latestNoIssueCheckIn && latestNoIssueCheckIn.durationSeconds > 0 ? `회고 ${Math.floor(latestNoIssueCheckIn.durationSeconds / 60)}분 ${latestNoIssueCheckIn.durationSeconds % 60}초` : "바로 완료"}</small></div><span className="status-chip 승인">참여 완료</span></div>
+                    <div className="saved-summary"><span className="no-issue-summary-mark">✓</span><div><b>이 작업은 특이사항 없음</b><small>{latestNoIssueCheckIn?.workOrder ?? draft.workOrder} · {latestNoIssueCheckIn?.product ?? draft.product}<br />{latestNoIssueCheckIn?.equipment ?? draft.equipment} · {latestNoIssueCheckIn && latestNoIssueCheckIn.durationSeconds > 0 ? `회고 ${Math.floor(latestNoIssueCheckIn.durationSeconds / 60)}분 ${latestNoIssueCheckIn.durationSeconds % 60}초` : "바로 완료"}</small></div><span className="status-chip 승인">참여 완료</span></div>
                   </>
                 ) : (
                   <>
