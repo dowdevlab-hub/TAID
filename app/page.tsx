@@ -65,7 +65,7 @@ export default function Home() {
           </div>
           <div className="structured-card">
             <div className="card-title-row">
-              <p className="panel-label">AI가 정리한 기록</p>
+              <p className="panel-label">구조화된 기록 예시</p>
               <span className="confidence">검토 필요 1건</span>
             </div>
             <dl>
@@ -78,7 +78,7 @@ export default function Home() {
           </div>
           <div className="product-caption">
             <span>01</span>
-            <p><b>말이 끝나면 기록도 끝.</b><br />숫자와 품목만 다시 확인합니다.</p>
+            <p><b>말이 끝나면 초안 완성.</b><br />핵심 필드를 원문과 다시 확인합니다.</p>
           </div>
         </div>
       </section>
@@ -91,16 +91,16 @@ export default function Home() {
       <section className="steps-section" id="how">
         <div className="section-heading">
           <p className="eyebrow"><span /> HOW IT WORKS</p>
-          <h2>복잡한 입력 대신,<br />세 번의 자연스러운 대화.</h2>
+          <h2>복잡한 입력 대신,<br />한 번의 3분 회고.</h2>
         </div>
         <div className="step-grid">
-          <article><span>01</span><h3>AI가 묻습니다</h3><p>오늘 어려웠던 점, 새로 알게 된 것, 다음 작업자에게 전할 말을 짧게 질문합니다.</p></article>
-          <article><span>02</span><h3>작업자가 말합니다</h3><p>현장 용어 그대로 답하면 공정·문제·원인·조치 후보를 자동으로 구조화합니다.</p></article>
-          <article><span>03</span><h3>공장이 배웁니다</h3><p>검토된 기록은 지식 카드가 되고, 같은 문제가 생기면 해결 경험을 다시 꺼내줍니다.</p></article>
+          <article><span>01</span><h3>세 가지 힌트를 봅니다</h3><p>어려웠던 점, 새로 알게 된 것, 다음 작업자에게 전할 말을 한 화면에서 안내합니다.</p></article>
+          <article><span>02</span><h3>한 번에 말합니다</h3><p>현장 용어 그대로 말하면 기본 규칙이 구조화하고, 설정된 경우 AI가 더 정교하게 정리합니다.</p></article>
+          <article><span>03</span><h3>확인하고 공유합니다</h3><p>작업자가 초안을 확인하고 관리자가 승인한 기록만 현장 지식으로 검색됩니다.</p></article>
         </div>
         <div className="how-cta">
-          <div><span>INTERACTIVE PROTOTYPE</span><b>설명은 여기까지.<br />이제 직접 눌러보세요.</b></div>
-          <a className="primary-button" href="/app" data-navigation="document">샘플 체험 바로 시작 <span aria-hidden="true">→</span></a>
+          <div><span>FIELD VALIDATION MVP</span><b>설명은 여기까지.<br />실제 입력 흐름을 확인하세요.</b></div>
+          <a className="primary-button" href="/app" data-navigation="document">MVP 바로 시작 <span aria-hidden="true">→</span></a>
         </div>
       </section>
 
@@ -113,8 +113,8 @@ export default function Home() {
         </div>
         <div className="loop-flow">
           <article><span>01 · CONTEXT</span><b>설비와 공정을 먼저 확인</b><p>QR 또는 직접 선택으로 말의 맥락을 고정합니다.</p></article>
-          <article><span>02 · CAPTURE</span><b>60초~3분 음성 회고</b><p>AI가 질문하고 작업자는 현장 용어 그대로 답합니다.</p></article>
-          <article><span>03 · VERIFY</span><b>숫자·품목을 사람이 확인</b><p>AI 초안을 바로 확정하지 않고 중요한 값만 다시 봅니다.</p></article>
+          <article><span>02 · CAPTURE</span><b>최대 3분 음성 회고</b><p>세 가지 말하기 힌트를 보며 한 번에 자유롭게 답합니다.</p></article>
+          <article><span>03 · VERIFY</span><b>핵심 필드를 사람이 확인</b><p>구조화 초안을 바로 확정하지 않고 원문과 다시 대조합니다.</p></article>
           <article><span>04 · APPROVE</span><b>관리자가 지식으로 승인</b><p>제보와 공식 지식을 분리해 신뢰도를 유지합니다.</p></article>
           <article><span>05 · REUSE</span><b>유사 문제에서 다시 사용</b><p>승인된 사례만 검색하고 답변의 근거를 표시합니다.</p></article>
         </div>
@@ -131,13 +131,13 @@ export default function Home() {
             <header><span>TAID / VOICE</span><b>01</b></header>
             <div className="module-orb"><i /><i /><i /><i /><i /><strong>말</strong><i /><i /><i /><i /><i /></div>
             <h3>현장의 말을<br />정확한 기록으로.</h3>
-            <ul><li>AI가 묻는 3분 회고</li><li>제조 현장 필드 자동 구조화</li><li>중요값 재확인과 원문 근거</li></ul>
+            <ul><li>세 가지 힌트가 있는 3분 회고</li><li>규칙 기반 구조화·선택적 AI 정리</li><li>중요값 재확인과 원문 근거</li></ul>
           </article>
           <article className="knowledge-module">
             <header><span>TAID / KNOWLEDGE</span><b>02</b></header>
             <div className="stacked-cards" aria-hidden="true"><i /><i /><div><span>APPROVED</span><b>실링 고무 위치 점검</b><small>증상 → 원인 → 조치 → 결과</small></div></div>
             <h3>검증된 경험을<br />모두의 지식으로.</h3>
-            <ul><li>관리자 검토·승인 워크플로</li><li>승인 지식만 검색·답변</li><li>반복 문제와 재사용 현황 집계</li></ul>
+            <ul><li>관리자 검토·승인 워크플로</li><li>승인된 LIVE 지식 키워드 검색</li><li>실제 기록·승인 상태 누적 집계</li></ul>
           </article>
         </div>
       </section>
@@ -146,11 +146,11 @@ export default function Home() {
         <div className="trust-title"><p className="eyebrow"><span /> TRUST BY DESIGN</p><h2>기록보다 먼저,<br />신뢰를 설계합니다.</h2></div>
         <div className="trust-principles">
           <article><span>01</span><b>상시 녹음 없음</b><p>작업자가 직접 시작한 순간만 기록합니다.</p></article>
-          <article><span>02</span><b>개인평가 미사용</b><p>사람이 아닌 이슈와 공정 개선을 봅니다.</p></article>
+          <article><span>02</span><b>개인평가 기능 없음</b><p>이 MVP는 이슈와 공정 개선 기록만 다룹니다.</p></article>
           <article><span>03</span><b>AI 초안 명시</b><p>원인 가설과 확정 사실을 구분합니다.</p></article>
           <article><span>04</span><b>승인된 지식만 검색</b><p>근거가 없을 때는 추측하지 않습니다.</p></article>
-          <article><span>05</span><b>삭제·보관 선택권</b><p>원음 보관 정책을 회사와 작업자가 확인합니다.</p></article>
-          <article><span>06</span><b>수정 이력 보존</b><p>누가 무엇을 확인했는지 추적할 수 있습니다.</p></article>
+          <article><span>05</span><b>앱의 원음 파일 미저장</b><p>전사문과 구조화 결과만 기록으로 저장합니다.</p></article>
+          <article><span>06</span><b>승인 상태 고정</b><p>승인·반려된 카드는 같은 화면에서 다시 뒤집지 않습니다.</p></article>
         </div>
       </section>
 
@@ -161,7 +161,7 @@ export default function Home() {
         </div>
         <div className="pilot-copy">
           <p>8~10명의 작업자와 함께 실제 소음 환경, 핵심 숫자 정확도, 4주차 참여율, 지식 승인과 재사용을 검증합니다.</p>
-          <div><span><b>70%</b>4주차 회고 참여율</span><span><b>85%</b>핵심 필드 완전성</span><span><b>0건</b>중대 신뢰·보안 이슈</span></div>
+          <div><span><b>목표 70%</b>4주차 회고 참여율</span><span><b>목표 85%</b>핵심 필드 완전성</span><span><b>목표 0건</b>중대 신뢰·보안 이슈</span></div>
           <a href="/app" data-navigation="document">MVP 데모 열기 <span>→</span></a>
         </div>
       </section>

@@ -8,7 +8,8 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_BODY_CHARACTERS = 16_000;
 const MAX_BODY_BYTES = MAX_BODY_CHARACTERS * 4;
 const MAX_TRANSCRIPT_CHARACTERS = 6_000;
-const MAX_CONTEXT_CHARACTERS = 160;
+const MAX_CONTEXT_CHARACTERS = 240;
+const MAX_STRUCTURED_CHARACTERS = 2_000;
 
 const KINDS = ["문제", "개선", "노하우"] as const;
 const REVIEW_FIELDS = [
@@ -37,6 +38,12 @@ type StructuredRecord = {
   result: string;
   confidence: number;
   needsReview: ReviewField[];
+};
+
+type StructureInput = {
+  transcript: string;
+  process: string;
+  equipment: string;
 };
 
 type ApiErrorCode =
@@ -129,13 +136,13 @@ function errorResponse(
 }
 
 function validateInput(payload: unknown):
-  | { ok: true; value: { transcript: string; process: string; equipment: string } }
+  | { ok: true; value: { transcript: string; process: string; equipment: string; structureMode: "auto" | "rules" } }
   | { ok: false; details: string[] } {
   if (!isRecord(payload)) {
     return { ok: false, details: ["요청 본문은 JSON 객체여야 합니다."] };
   }
 
-  const allowedKeys = new Set(["transcript", "process", "equipment"]);
+  const allowedKeys = new Set(["transcript", "process", "equipment", "structureMode"]);
   const details = Object.keys(payload)
     .filter((key) => !allowedKeys.has(key))
     .map((key) => `지원하지 않는 필드입니다: ${key}`);
@@ -148,6 +155,13 @@ function validateInput(payload: unknown):
   }
   if (payload.equipment !== undefined && typeof payload.equipment !== "string") {
     details.push("equipment는 문자열이어야 합니다.");
+  }
+  if (
+    payload.structureMode !== undefined &&
+    payload.structureMode !== "auto" &&
+    payload.structureMode !== "rules"
+  ) {
+    details.push("structureMode은 auto 또는 rules여야 합니다.");
   }
 
   if (details.length > 0 || typeof payload.transcript !== "string") {
@@ -171,7 +185,15 @@ function validateInput(payload: unknown):
 
   return details.length > 0
     ? { ok: false, details }
-    : { ok: true, value: { transcript, process: processName, equipment } };
+    : {
+        ok: true,
+        value: {
+          transcript,
+          process: processName,
+          equipment,
+          structureMode: payload.structureMode === "rules" ? "rules" : "auto",
+        },
+      };
 }
 
 function extractOutputText(payload: unknown):
@@ -230,6 +252,15 @@ function parseStructuredRecord(text: string): StructuredRecord | null {
   if (!KINDS.includes(parsed.kind as StructuredRecord["kind"])) return null;
   if (stringKeys.some((key) => typeof parsed[key] !== "string")) return null;
   if (
+    (parsed.process as string).trim().length > MAX_CONTEXT_CHARACTERS ||
+    (parsed.equipment as string).trim().length > MAX_CONTEXT_CHARACTERS ||
+    stringKeys.slice(2).some(
+      (key) => (parsed[key] as string).trim().length > MAX_STRUCTURED_CHARACTERS,
+    )
+  ) {
+    return null;
+  }
+  if (
     typeof parsed.confidence !== "number" ||
     !Number.isInteger(parsed.confidence) ||
     parsed.confidence < 0 ||
@@ -275,6 +306,88 @@ function parseStructuredRecord(text: string): StructuredRecord | null {
     ...normalized,
     needsReview: [...reviewFields],
   };
+}
+
+function splitEvidenceSentences(transcript: string) {
+  return transcript
+    .split(/(?:\r?\n|[.!?。！？])+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function firstEvidenceSentence(sentences: string[], pattern: RegExp) {
+  return sentences.find((sentence) => pattern.test(sentence)) ?? "";
+}
+
+function structureWithRules(input: StructureInput): StructuredRecord {
+  const sentences = splitEvidenceSentences(input.transcript);
+  const problemPattern = /불량|누설|이상|문제|고장|정지|흠집|스크래치|진동|소음|거칠|결함|오류/;
+  const improvementPattern = /개선|제안|아이디어|바꾸면|추가하면|줄이면|높이면/;
+  const knowhowPattern = /노하우|팁|주의|먼저 확인|다음 (?:사람|작업자)|기억|순서/;
+  const causePattern = /원인|때문|영향|밀려|마모|느슨|풀려|틀어|막혀|부족|과다|오염|체결 불량|압력|온도/;
+  const actionPattern = /조치|조정|교체|수리|청소|재작업|다시 (?:끼우|조립|설정|검사)|확인|체결|설정|보정|정렬|제거/;
+  const resultPattern = /통과|정상|해결|개선|감소|완료|재발 (?:없|하지)|문제 (?:없|해결)|이상 (?:없|해소)/;
+
+  const symptom = firstEvidenceSentence(sentences, problemPattern);
+  const cause = firstEvidenceSentence(sentences, causePattern);
+  const action = firstEvidenceSentence(sentences, actionPattern);
+  const result = firstEvidenceSentence(sentences, resultPattern);
+
+  const countMatches = [...input.transcript.matchAll(/(\d[\d,]*)\s*(개|대|건|ea|pcs?)/gi)];
+  const defectMatch = input.transcript.match(
+    /(?:불량|누설|이상|결함)[^\d\r\n]{0,12}(\d[\d,]*)\s*(개|대|건|ea|pcs?)/i,
+  ) ?? input.transcript.match(
+    /(\d[\d,]*)\s*(개|대|건|ea|pcs?)(?:에서|가|는|중)?[^\d\r\n]{0,12}(?:불량|누설|이상|결함)/i,
+  );
+  const defectCount = defectMatch ? `${defectMatch[1]}${defectMatch[2]}` : "";
+  const defectIndex = defectMatch?.index ?? -1;
+  const quantityMatch = countMatches.find((match) => {
+    if (defectIndex < 0 || match.index === undefined) return true;
+    return Math.abs(match.index - defectIndex) > Math.max(match[0].length, 18);
+  }) ?? (countMatches.length > 1 ? countMatches[0] : undefined);
+  const quantity = quantityMatch ? `${quantityMatch[1]}${quantityMatch[2]}` : "";
+
+  const hasProblem = problemPattern.test(input.transcript);
+  const kind: StructuredRecord["kind"] = hasProblem
+    ? "문제"
+    : improvementPattern.test(input.transcript)
+      ? "개선"
+      : knowhowPattern.test(input.transcript)
+        ? "노하우"
+        : "노하우";
+
+  const rawStructuredFields = {
+    symptom: symptom || sentences[0] || "",
+    cause,
+    action,
+    result,
+  };
+  const truncatedFields = new Set<ReviewField>(
+    (Object.entries(rawStructuredFields) as Array<[ReviewField, string]>)
+      .filter(([, value]) => value.length > MAX_STRUCTURED_CHARACTERS)
+      .map(([field]) => field),
+  );
+  const candidate: Omit<StructuredRecord, "confidence" | "needsReview"> = {
+    kind,
+    process: input.process,
+    equipment: input.equipment,
+    quantity,
+    defect: defectCount,
+    symptom: rawStructuredFields.symptom.slice(0, MAX_STRUCTURED_CHARACTERS),
+    cause: rawStructuredFields.cause.slice(0, MAX_STRUCTURED_CHARACTERS),
+    action: rawStructuredFields.action.slice(0, MAX_STRUCTURED_CHARACTERS),
+    result: rawStructuredFields.result.slice(0, MAX_STRUCTURED_CHARACTERS),
+  };
+  const needsReview = REVIEW_FIELDS.filter((field) => {
+    if (field === "kind") return !hasProblem && !improvementPattern.test(input.transcript) && !knowhowPattern.test(input.transcript);
+    return candidate[field] === "" || truncatedFields.has(field);
+  });
+  const supportedFieldCount = REVIEW_FIELDS.filter(
+    (field) => field !== "kind" && candidate[field] !== "",
+  ).length;
+  const confidence = Math.min(82, 30 + supportedFieldCount * 7);
+
+  return { ...candidate, confidence, needsReview };
 }
 
 function summarizeUpstreamFailure(status: number) {
@@ -356,11 +469,15 @@ export async function POST(request: Request) {
     OPENAI_MODEL?: string;
   };
   const apiKey = runtimeEnv.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    return errorResponse(
-      503,
-      "AI_NOT_CONFIGURED",
-      "서버에 OpenAI API 키가 설정되지 않았습니다.",
+  if (!apiKey || input.value.structureMode === "rules") {
+    return Response.json(
+      { ok: true, mode: "rules", data: structureWithRules(input.value) },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+          "X-TAID-Structure-Mode": "rules",
+        },
+      },
     );
   }
 
@@ -466,10 +583,11 @@ export async function POST(request: Request) {
     );
   }
 
-  return Response.json({ ok: true, mode: "live", data: structured }, {
+  return Response.json({ ok: true, mode: "ai", data: structured }, {
     headers: {
       "Cache-Control": "no-store",
       "X-TAID-AI-Model": model,
+      "X-TAID-Structure-Mode": "ai",
     },
   });
 }
