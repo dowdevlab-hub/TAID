@@ -341,17 +341,17 @@ button { font: inherit; }
 .reflection-guide { margin-top: 22px; border: 1px solid #ced4cc; background: #f6f7f2; }
 .reflection-guide-heading { padding: 16px 18px; border-bottom: 1px solid #d7dcd5; }
 .reflection-guide-heading span, .reflection-guide-heading b, .reflection-guide-heading small { display: block; }
-.reflection-guide-heading span { color: #668620; font: 800 8px "Courier New", monospace; letter-spacing: .04em; }
+.reflection-guide-heading span { color: #668620; font: 800 10px "Courier New", monospace; letter-spacing: .04em; }
 .reflection-guide-heading b { margin-top: 6px; color: #26322c; font-size: 12px; }
-.reflection-guide-heading small { margin-top: 4px; color: #748078; font-size: 8px; line-height: 1.5; }
+.reflection-guide-heading small { margin-top: 4px; color: #5f6d64; font-size: 11px; line-height: 1.5; }
 .reflection-guide-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
 .reflection-guide article { min-width: 0; padding: 15px 13px; display: flex; align-items: flex-start; gap: 9px; border-right: 1px solid #d7dcd5; }
 .reflection-guide article:last-child { border-right: 0; }
 .reflection-guide article > span { display: grid; place-items: center; flex: 0 0 23px; height: 23px; border-radius: 50%; background: #17211d; color: #c8ff3d; font: 800 9px "Courier New", monospace; }
 .reflection-guide article div { min-width: 0; }
 .reflection-guide article b, .reflection-guide article small { display: block; }
-.reflection-guide article b { font-size: 9px; line-height: 1.45; }
-.reflection-guide article small { margin-top: 5px; color: #747f78; font-size: 8px; line-height: 1.5; }
+.reflection-guide article b { font-size: 13px; line-height: 1.45; }
+.reflection-guide article small { margin-top: 5px; color: #5f6d64; font-size: 11px; line-height: 1.5; }
 .record-context-summary { margin-top: 18px; padding: 11px 13px; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; border: 1px solid #d7dbd5; background: #f6f6f2; }
 .record-context-summary span { padding: 3px 5px; background: #17211d; color: #c8ff3d; font: 800 8px "Courier New", monospace; }
 .record-context-summary b { align-self: center; font-size: 10px; }
