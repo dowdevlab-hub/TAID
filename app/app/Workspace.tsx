@@ -35,22 +35,27 @@ type KnowledgeCard = {
   id: number;
   title: string;
   kind: "문제" | "개선" | "노하우";
+  workOrder: string;
+  product: string;
   process: string;
   equipment: string;
   symptom: string;
   cause: string;
   action: string;
   result: string;
+  sourceAnswers: string[];
   author: string;
   createdAt: string;
   status: CardStatus;
   confidence: number;
-  structureMode?: "live" | "sample";
+  structureMode: "live" | "sample";
   views: number;
 };
 
 type DraftRecord = {
   kind: KnowledgeCard["kind"];
+  workOrder: string;
+  product: string;
   process: string;
   equipment: string;
   quantity: string;
@@ -61,18 +66,64 @@ type DraftRecord = {
   result: string;
 };
 
-const REQUIRED_DRAFT_FIELDS: Record<KnowledgeCard["kind"], readonly ReviewField[]> = {
-  문제: ["process", "equipment", "quantity", "defect", "symptom", "action"],
-  개선: ["process", "equipment", "symptom", "action", "result"],
-  노하우: ["process", "equipment", "symptom", "action"],
+type DraftField = keyof DraftRecord;
+
+const DRAFT_FIELD_LABELS: Record<DraftField, string> = {
+  kind: "기록 유형",
+  workOrder: "작업지시",
+  product: "품목",
+  process: "공정",
+  equipment: "설비·라인",
+  quantity: "작업 수량",
+  defect: "불량 수량",
+  symptom: "증상",
+  cause: "원인 가설",
+  action: "조치",
+  result: "결과",
+};
+
+const REQUIRED_DRAFT_FIELDS: Record<KnowledgeCard["kind"], readonly DraftField[]> = {
+  문제: ["workOrder", "product", "process", "equipment", "quantity", "defect", "symptom", "action"],
+  개선: ["workOrder", "product", "process", "equipment", "symptom", "action", "result"],
+  노하우: ["workOrder", "product", "process", "equipment", "symptom", "action"],
 };
 
 const CONTEXT_OPTIONS = [
-  { process: "A모델 최종 조립", equipment: "조립 2라인 · AS-02" },
-  { process: "B모델 조립", equipment: "조립 1라인 · AS-01" },
-  { process: "정밀 가공", equipment: "가공 1라인 · CNC-03" },
-  { process: "출하 포장", equipment: "포장 1라인 · PR-01" },
+  { workOrder: "WO-260818-042", product: "A모델 밸브 Assy", process: "A모델 최종 조립", equipment: "조립 2라인 · AS-02" },
+  { workOrder: "WO-260818-037", product: "B모델 밸브 Assy", process: "B모델 조립", equipment: "조립 1라인 · AS-01" },
+  { workOrder: "WO-260818-031", product: "Ø28 샤프트", process: "정밀 가공", equipment: "가공 1라인 · CNC-03" },
+  { workOrder: "WO-260818-026", product: "C모델 출하 세트", process: "출하 포장", equipment: "포장 1라인 · PR-01" },
 ] as const;
+
+const MAX_ANSWER_CHARACTERS = 1_800;
+const MAX_TRANSCRIPT_CHARACTERS = 6_000;
+
+const REFLECTION_QUESTIONS = [
+  {
+    short: "Q1 어려웠던 점",
+    title: "오늘 가장 어려웠던 점은 무엇인가요?",
+    helper: "작업·불량 수량과 어떤 현상이 있었는지 함께 말해주세요.",
+    placeholder: "예: A모델 50개 중 3개에서 누설 불량이 발생했습니다.",
+  },
+  {
+    short: "Q2 새로 알게 된 점",
+    title: "오늘 새롭게 알게 된 것이 있나요?",
+    helper: "원인으로 추정한 내용과 확인 과정이 있다면 말해주세요.",
+    placeholder: "예: 실링 고무가 안쪽으로 밀리면 누설이 생길 수 있다는 것을 확인했습니다.",
+  },
+  {
+    short: "Q3 다음 작업자에게",
+    title: "다음 사람에게 주고 싶은 한마디는?",
+    helper: "실행한 조치, 확인된 결과와 다음 작업자가 볼 점을 말해주세요.",
+    placeholder: "예: 실링 위치를 먼저 확인하고 둘레를 눌러 끼운 뒤 재검사해주세요.",
+  },
+] as const;
+
+const demoReflectionAnswers = [
+  "A모델 조립 50개를 완료했고 3개에서 누설 불량이 났습니다.",
+  "확인해 보니 실링 고무가 홈 안쪽으로 밀려 있었습니다.",
+  "실링 고무를 홈에 맞춰 다시 끼우고 둘레를 눌러 확인하니 재작업 3개 모두 재검사를 통과했습니다. 다음 작업자도 실링 위치를 먼저 확인해주세요.",
+];
 
 interface SpeechRecognitionResultLike {
   [index: number]: { transcript: string };
@@ -137,12 +188,15 @@ const initialCards: KnowledgeCard[] = [
     id: 1042,
     title: "A모델 누설 불량 — 실링 고무 위치 점검",
     kind: "문제",
+    workOrder: "WO-260818-042",
+    product: "A모델 밸브 Assy",
     process: "A모델 최종 조립",
     equipment: "조립 2라인 · AS-02",
     symptom: "50개 중 3개 누설 검사 불합격",
     cause: "실링 고무가 홈 안쪽으로 약 2mm 밀림",
     action: "실링 삽입 후 손가락으로 둘레 1회 확인, 지그 기준선 추가",
     result: "재작업 3개 정상, 이후 120개 동일 불량 없음",
+    sourceAnswers: demoReflectionAnswers,
     author: "김민수",
     createdAt: "오늘 14:32",
     status: "검토 대기",
@@ -154,12 +208,19 @@ const initialCards: KnowledgeCard[] = [
     id: 1038,
     title: "CNC-03 진동 증가 시 척 체결 순서",
     kind: "노하우",
+    workOrder: "WO-260818-031",
+    product: "Ø28 샤프트",
     process: "정밀 가공",
     equipment: "가공 1라인 · CNC-03",
     symptom: "Ø28 가공 중 진동음과 표면 거칠기 증가",
     cause: "척 2번 조가 먼저 밀착되어 소재 편심 발생",
     action: "1→3→2 순서로 1차 체결 후 토크렌치로 균등 체결",
     result: "진동 해소, 표면조도 Ra 1.4 복귀",
+    sourceAnswers: [
+      "Ø28 샤프트 가공 중 진동음이 커지고 표면이 거칠어졌습니다.",
+      "척 2번 조가 먼저 밀착되면 소재 편심이 생긴다는 것을 확인했습니다.",
+      "다음에는 1, 3, 2 순서로 1차 체결하고 토크렌치로 균등하게 조여주세요.",
+    ],
     author: "박성호",
     createdAt: "어제 17:18",
     status: "승인",
@@ -171,12 +232,19 @@ const initialCards: KnowledgeCard[] = [
     id: 1031,
     title: "포장 라벨 재출력 동선 4분 단축",
     kind: "개선",
+    workOrder: "WO-260818-026",
+    product: "C모델 출하 세트",
     process: "출하 포장",
     equipment: "포장 1라인 · PR-01",
     symptom: "라벨 오류 발생 시 사무실 PC까지 이동",
     cause: "현장 프린터에 승인된 재출력 메뉴가 없음",
     action: "불량 라벨 QR 스캔 후 현장 태블릿에서 1회 재출력",
     result: "건당 처리 6분→2분, 2주간 오출력 없음",
+    sourceAnswers: [
+      "라벨 오류가 나면 사무실 PC까지 이동해야 해서 시간이 오래 걸렸습니다.",
+      "승인된 재출력 메뉴를 현장 태블릿에 두면 이동을 줄일 수 있었습니다.",
+      "불량 라벨 QR을 먼저 스캔하고 현장 태블릿에서 1회만 재출력해주세요.",
+    ],
     author: "이수진",
     createdAt: "8월 15일",
     status: "승인",
@@ -188,12 +256,19 @@ const initialCards: KnowledgeCard[] = [
     id: 1026,
     title: "B모델 토크 편차 원인 후보 정리",
     kind: "문제",
+    workOrder: "WO-260818-037",
+    product: "B모델 밸브 Assy",
     process: "B모델 조립",
     equipment: "조립 1라인 · AS-01",
     symptom: "체결 토크 8.5~11.2 N·m 편차",
     cause: "렌치 교정 주기 경과 가능성",
     action: "예비 렌치 교체 후 30개 비교 측정 필요",
     result: "확인 진행 중",
+    sourceAnswers: [
+      "B모델 체결 토크가 8.5에서 11.2 N·m 사이로 흔들렸습니다.",
+      "렌치 교정 주기가 지난 것이 원인일 수 있다고 봤지만 아직 확인 중입니다.",
+      "다음 작업자는 예비 렌치로 30개를 비교 측정해 결과를 남겨주세요.",
+    ],
     author: "최은영",
     createdAt: "8월 14일",
     status: "검토 대기",
@@ -210,14 +285,11 @@ const navItems: { key: View; label: string; icon: string }[] = [
   { key: "knowledge", label: "지식 검색", icon: "⌕" },
 ];
 
-const demoTranscript =
-  "A모델 조립 50개 완료했고 3개에서 누설 불량이 났어요. 확인해 보니 실링 고무가 안쪽으로 밀려 있었습니다. 고무를 홈에 맞춰 다시 끼우고 둘레를 한 번 눌러 확인하니 재검사는 모두 통과했습니다. 다음 작업자도 실링 위치를 먼저 봐주세요.";
-
 const captureSteps = ["현장 선택", "말로 기록", "내용 확인", "저장 완료"];
-const STORAGE_KEY = "taid-mvp-cards-v1";
+const STORAGE_KEY = "taid-mvp-cards-v2";
 
 function persistCards(cards: KnowledgeCard[]) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, cards }));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, cards }));
 }
 
 function isReviewField(value: unknown): value is ReviewField {
@@ -231,6 +303,22 @@ function extractFirstNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function buildCombinedTranscript(answers: string[], context: DraftRecord) {
+  const contextBlock = [
+    "[작업 맥락 — 작업자가 선택한 값]",
+    `작업지시: ${context.workOrder}`,
+    `품목: ${context.product}`,
+    `공정: ${context.process}`,
+    `설비·라인: ${context.equipment}`,
+  ].join("\n");
+
+  const answerBlocks = REFLECTION_QUESTIONS.map(
+    (question, index) => `[${question.short}]\n${answers[index]?.trim() || "특이사항 없음"}`,
+  );
+
+  return [contextBlock, ...answerBlocks].join("\n\n");
+}
+
 export default function Workspace() {
   const [view, setView] = useState<View>("capture");
   const [cards, setCards] = useState<KnowledgeCard[]>(initialCards);
@@ -238,6 +326,8 @@ export default function Workspace() {
   const [recording, setRecording] = useState(false);
   const [finalizingRecording, setFinalizingRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [reflectionQuestionIndex, setReflectionQuestionIndex] = useState(0);
+  const [reflectionAnswers, setReflectionAnswers] = useState<string[]>(["", "", ""]);
   const [transcript, setTranscript] = useState("");
   const [processing, setProcessing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
@@ -255,6 +345,7 @@ export default function Workspace() {
   const recognitionFinalizeTimerRef = useRef<number | null>(null);
   const recordingEndNoticeRef = useRef("");
   const analysisControllerRef = useRef<AbortController | null>(null);
+  const allowDocumentNavigationRef = useRef(false);
 
   const finalizeRecording = useCallback((completionNotice: string) => {
     const recognition = recognitionRef.current;
@@ -297,6 +388,8 @@ export default function Workspace() {
 
   const [draft, setDraft] = useState<DraftRecord>({
     kind: "문제" as KnowledgeCard["kind"],
+    workOrder: "",
+    product: "",
     process: "",
     equipment: "",
     quantity: "",
@@ -313,7 +406,7 @@ export default function Workspace() {
       if (stored) {
         try {
           const parsed = JSON.parse(stored) as { version?: number; cards?: KnowledgeCard[] };
-          if (parsed.version === 1 && Array.isArray(parsed.cards)) setCards(parsed.cards);
+          if (parsed.version === 2 && Array.isArray(parsed.cards)) setCards(parsed.cards);
         } catch {
           window.localStorage.removeItem(STORAGE_KEY);
         }
@@ -324,16 +417,18 @@ export default function Workspace() {
 
   useEffect(() => {
     if (!recording) return;
-    const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
+    const timer = window.setInterval(
+      () => setSeconds((value) => Math.min(value + 1, 180)),
+      1000,
+    );
     const limit = window.setTimeout(() => {
-      setSeconds(180);
-      finalizeRecording("최대 녹음 시간 3분에 도달해 종료했습니다. 기존 입력은 보존되며 추가 녹음은 뒤에 이어집니다.");
-    }, 180_000);
+      finalizeRecording("전체 회고의 최대 녹음 시간 3분에 도달해 종료했습니다. 입력된 답변은 그대로 보존됩니다.");
+    }, Math.max(0, 180 - seconds) * 1000);
     return () => {
       window.clearInterval(timer);
       window.clearTimeout(limit);
     };
-  }, [finalizeRecording, recording]);
+  }, [finalizeRecording, recording, seconds]);
 
   useEffect(() => () => {
     analysisControllerRef.current?.abort();
@@ -362,11 +457,31 @@ export default function Workspace() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const captureWorkInProgress = view === "capture" && captureStage > 0 && captureStage < 3 && Boolean(
+    transcript.trim() ||
+    reflectionAnswers.some((answer) => answer.trim()) ||
+    structureMeta ||
+    recording ||
+    finalizingRecording ||
+    seconds > 0,
+  );
+
+  useEffect(() => {
+    if (!captureWorkInProgress) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (allowDocumentNavigationRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [captureWorkInProgress]);
+
   const selectedCard = cards.find((card) => card.id === selectedCardId) ?? cards[0];
   const pendingCards = cards.filter((card) => card.status === "검토 대기");
   const approvedCards = cards.filter((card) => card.status === "승인");
   const filteredCards = approvedCards.filter((card) =>
-    `${card.title} ${card.process} ${card.equipment} ${card.symptom} ${card.cause} ${card.action}`
+    `${card.title} ${card.workOrder} ${card.product} ${card.process} ${card.equipment} ${card.symptom} ${card.cause} ${card.action} ${card.sourceAnswers.join(" ")}`
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
@@ -402,6 +517,43 @@ export default function Workspace() {
     setCriticalConfirmed(false);
   }
 
+  function getReflectionAnswersWithCurrent(currentText = transcript) {
+    const nextAnswers = [...reflectionAnswers];
+    nextAnswers[reflectionQuestionIndex] = currentText.trim();
+    return nextAnswers;
+  }
+
+  function moveToReflectionQuestion(nextIndex: number) {
+    if (
+      nextIndex < 0 ||
+      nextIndex >= REFLECTION_QUESTIONS.length ||
+      recording ||
+      finalizingRecording ||
+      transcriptReviewRequired
+    ) {
+      return;
+    }
+    const nextAnswers = getReflectionAnswersWithCurrent();
+    setReflectionAnswers(nextAnswers);
+    setReflectionQuestionIndex(nextIndex);
+    setTranscript(nextAnswers[nextIndex] ?? "");
+    recognitionBaseTranscriptRef.current = nextAnswers[nextIndex] ?? "";
+    setAnalysisError("");
+    setSpeechNotice("");
+  }
+
+  function selectWorkOrder(workOrder: string) {
+    const context = CONTEXT_OPTIONS.find((option) => option.workOrder === workOrder);
+    setDraft((current) => ({
+      ...current,
+      workOrder: context?.workOrder ?? "",
+      product: context?.product ?? "",
+      process: context?.process ?? "",
+      equipment: context?.equipment ?? "",
+    }));
+    setCriticalConfirmed(false);
+  }
+
   function cancelAnalysis() {
     const controller = analysisControllerRef.current;
     analysisControllerRef.current = null;
@@ -415,6 +567,8 @@ export default function Workspace() {
     recognitionBaseTranscriptRef.current = "";
     setCaptureStage(0);
     setSeconds(0);
+    setReflectionQuestionIndex(0);
+    setReflectionAnswers(["", "", ""]);
     setTranscript("");
     setAnalysisError("");
     setSpeechNotice("");
@@ -423,6 +577,8 @@ export default function Workspace() {
     setCriticalConfirmed(false);
     setDraft((current) => ({
       kind: "문제",
+      workOrder: preserveContext ? current.workOrder : "",
+      product: preserveContext ? current.product : "",
       process: preserveContext ? current.process : "",
       equipment: preserveContext ? current.equipment : "",
       quantity: "",
@@ -434,7 +590,23 @@ export default function Workspace() {
     }));
   }
 
+  function hasCaptureWorkInProgress() {
+    return captureWorkInProgress;
+  }
+
+  function confirmCaptureReset() {
+    return !hasCaptureWorkInProgress() || window.confirm(
+      "작성 중인 3문항 답변과 구조화 초안을 지우고 이동할까요?",
+    );
+  }
+
+  function returnToContextSelection() {
+    if (!confirmCaptureReset()) return;
+    resetCaptureState();
+  }
+
   function changeView(nextView: View) {
+    if (view === "capture" && !confirmCaptureReset()) return;
     if (nextView === "capture" || view === "capture") {
       resetCaptureState();
     } else {
@@ -451,10 +623,13 @@ export default function Workspace() {
 
   function startRecording() {
     if (finalizingRecording) return;
+    if (seconds >= 180) {
+      setSpeechNotice("전체 회고의 3분 녹음 한도를 사용했습니다. 남은 답변은 직접 입력해주세요.");
+      return;
+    }
     stopRecording();
     setAnalysisError("");
     setSpeechNotice("");
-    setSeconds(0);
     recognitionBaseTranscriptRef.current = transcript.trim();
 
     const speechWindow = window as typeof window & {
@@ -549,16 +724,18 @@ export default function Workspace() {
   function clearTranscriptForRestart() {
     if (
       transcript.trim() &&
-      !window.confirm("현재 입력 내용을 모두 지우고 처음부터 다시 시작할까요?")
+      !window.confirm("현재 질문의 답변을 모두 지울까요?")
     ) {
       return;
     }
     stopRecording();
     recognitionBaseTranscriptRef.current = "";
+    setReflectionAnswers((current) => current.map((answer, index) => (
+      index === reflectionQuestionIndex ? "" : answer
+    )));
     setTranscript("");
-    setSeconds(0);
     setAnalysisError("");
-    setSpeechNotice("기존 입력을 지웠습니다. 녹음 버튼을 눌러 처음부터 시작하세요.");
+    setSpeechNotice("현재 질문의 답변을 지웠습니다. 다시 녹음하거나 직접 입력하세요.");
     setTranscriptReviewRequired(false);
   }
 
@@ -572,11 +749,20 @@ export default function Workspace() {
       return;
     }
     stopRecording();
-    const source = transcript.trim();
-    if (!source) {
-      setAnalysisError("먼저 음성으로 기록하거나 인식된 내용을 직접 입력해주세요.");
+    const nextAnswers = getReflectionAnswersWithCurrent();
+    const unansweredQuestion = nextAnswers.findIndex((answer) => !answer.trim());
+    if (unansweredQuestion >= 0) {
+      setAnalysisError(`${unansweredQuestion + 1}번째 질문에 답하거나 ‘특이사항 없음’을 선택해주세요.`);
       return;
     }
+    const source = buildCombinedTranscript(nextAnswers, draft);
+    if (source.length > MAX_TRANSCRIPT_CHARACTERS) {
+      setAnalysisError(
+        `세 답변의 합산 길이가 ${MAX_TRANSCRIPT_CHARACTERS.toLocaleString()}자를 넘었습니다. 답변을 조금 줄여주세요.`,
+      );
+      return;
+    }
+    setReflectionAnswers(nextAnswers);
 
     cancelAnalysis();
     const controller = new AbortController();
@@ -643,17 +829,18 @@ export default function Workspace() {
         throw new Error("AI 서버 응답 형식을 확인할 수 없습니다. 다시 시도해주세요.");
       }
 
-      setDraft({
+      setDraft((current) => ({
+        ...current,
         kind: data.kind,
-        process: data.process || draft.process,
-        equipment: data.equipment || draft.equipment,
+        process: current.process,
+        equipment: current.equipment,
         quantity: data.quantity,
         defect: data.defect,
         symptom: data.symptom,
         cause: data.cause,
         action: data.action,
         result: data.result,
-      });
+      }));
       setStructureMeta({
         mode: "live",
         confidence,
@@ -678,9 +865,15 @@ export default function Workspace() {
     }
   }
 
-  function continueWithSample() {
+  function continueWithSample(answerOverride?: string[]) {
     stopRecording();
     cancelAnalysis();
+    const nextAnswers = answerOverride ?? getReflectionAnswersWithCurrent();
+    setReflectionAnswers(nextAnswers);
+    if (answerOverride) {
+      setReflectionQuestionIndex(REFLECTION_QUESTIONS.length - 1);
+      setTranscript(answerOverride[REFLECTION_QUESTIONS.length - 1] ?? "");
+    }
     setTranscriptReviewRequired(false);
     setDraft((current) => ({
       ...current,
@@ -708,6 +901,8 @@ export default function Workspace() {
       id: Date.now(),
       title: `${draft.process} — ${draftTitleDetail}`,
       kind: draft.kind,
+      workOrder: draft.workOrder,
+      product: draft.product,
       process: draft.process,
       equipment: draft.equipment,
       symptom: draft.quantity.trim()
@@ -716,6 +911,7 @@ export default function Workspace() {
       cause: draft.cause,
       action: draft.action,
       result: draft.result,
+      sourceAnswers: reflectionAnswers,
       author: "김민수",
       createdAt: "방금 전",
       status: "검토 대기",
@@ -757,6 +953,7 @@ export default function Workspace() {
   }
 
   function resetDemo() {
+    if (view === "capture" && !confirmCaptureReset()) return;
     resetCaptureState(false);
     setCards(initialCards);
     setSelectedCardId(initialCards[0].id);
@@ -769,11 +966,11 @@ export default function Workspace() {
   }
 
   return (
-    <div className="workspace-shell">
+    <div className={`workspace-shell view-${view}`}>
       <aside className="workspace-sidebar">
         {/* Sites에서는 문서 이동이 클라이언트 라우팅보다 안정적이므로 기본 링크를 사용합니다. */}
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a className="workspace-logo" href="/" data-navigation="document" aria-label="TAID 홈페이지">
+        <a className="workspace-logo" href="/" data-navigation="document" aria-label="TAID 홈페이지" onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; if (view === "capture" && !confirmCaptureReset()) event.preventDefault(); else { allowDocumentNavigationRef.current = true; window.setTimeout(() => { allowDocumentNavigationRef.current = false; }, 1_500); } }}>
           TAID<span>.</span>
         </a>
         <span className="mvp-label">INTERACTIVE MVP · DEMO ENVIRONMENT</span>
@@ -810,8 +1007,8 @@ export default function Workspace() {
       <main className="workspace-main">
         <header className="workspace-mobile-header">
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a className="workspace-logo" href="/" data-navigation="document">TAID<span>.</span> <small>MVP · DEMO</small></a>
-          <button type="button" onClick={() => changeView("capture")}>+ 새 기록</button>
+          <a className="workspace-logo" href="/" data-navigation="document" onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; if (view === "capture" && !confirmCaptureReset()) event.preventDefault(); else { allowDocumentNavigationRef.current = true; window.setTimeout(() => { allowDocumentNavigationRef.current = false; }, 1_500); } }}>TAID<span>.</span> <small>MVP · DEMO</small></a>
+          <button type="button" disabled={view === "capture"} onClick={() => changeView("capture")}>{view === "capture" ? "기록 진행 중" : "+ 새 기록"}</button>
         </header>
 
         {view === "dashboard" && (
@@ -843,7 +1040,7 @@ export default function Workspace() {
                   {cards.slice(0, 3).map((card) => (
                     <button className="feed-item" type="button" key={card.id} onClick={() => { setSelectedCardId(card.id); setView(card.status === "승인" ? "knowledge" : "review"); }}>
                       <span className={`kind-mark ${card.kind}`}>{card.kind}</span>
-                      <div><b>{card.title}</b><p>{card.equipment} · {card.author} · {card.createdAt} <span className={`mode-chip ${card.structureMode === "live" ? "live" : "sample"}`}>{card.structureMode === "live" ? "LIVE AI" : "SAMPLE"}</span></p></div>
+                      <div><b>{card.title}</b><p>{card.workOrder} · {card.product}<br />{card.equipment} · {card.author} · {card.createdAt} <span className={`mode-chip ${card.structureMode === "live" ? "live" : "sample"}`}>{card.structureMode === "live" ? "LIVE AI" : "SAMPLE"}</span></p></div>
                       <span className={`status-chip ${card.status.replace(" ", "-")}`}>{card.status}</span>
                       <span aria-hidden="true">→</span>
                     </button>
@@ -875,48 +1072,79 @@ export default function Workspace() {
 
             {captureStage === 0 && (
               <div className="capture-card context-card">
-                <span className="section-kicker">STEP 01</span><h2>어디에서 있었던 일인가요?</h2><p>공정과 설비를 선택하거나 QR 데모로 샘플 컨텍스트를 채워주세요.</p>
+                <span className="section-kicker">STEP 01</span><h2>어떤 작업에서 있었던 일인가요?</h2><p>작업지시·품목·공정·설비를 연결해 기록의 맥락을 먼저 고정합니다.</p>
                 <div className="demo-guide"><b>처음 체험하시나요?</b><span>QR 데모를 누른 뒤 다음 화면에서 ‘AI 없이 샘플 전체 흐름 체험’을 선택하세요.</span></div>
-                <button className="qr-button" type="button" onClick={() => { setDraft((current) => ({ ...current, process: "A모델 최종 조립", equipment: "조립 2라인 · AS-02" })); setCriticalConfirmed(false); setToast("QR 데모: AS-02 공정·설비를 샘플로 채웠습니다."); }}><span>▦</span><b>설비 QR 데모</b><small>AS-02 공정·설비 값을 샘플로 채웁니다</small></button>
+                <button className="qr-button" type="button" onClick={() => { selectWorkOrder("WO-260818-042"); setToast("QR 데모: 작업지시·품목·공정·설비를 연결했습니다."); }}><span>▦</span><b>설비 QR 데모</b><small>WO-260818-042 · A모델 · AS-02 값을 함께 채웁니다</small></button>
                 <div className="or-line"><span>또는 직접 선택</span></div>
+                <p className="context-helper">한 항목을 선택하면 같은 작업에 연결된 나머지 값도 함께 채워집니다.</p>
                 <div className="field-grid">
-                  <label><span>공정</span><select value={draft.process} onChange={(event) => { const process = event.target.value; setDraft((current) => ({ ...current, process, equipment: "" })); setCriticalConfirmed(false); }}><option value="">공정을 선택하세요</option>{CONTEXT_OPTIONS.map((option) => <option key={option.process}>{option.process}</option>)}</select></label>
-                  <label><span>설비·라인</span><select value={draft.equipment} disabled={!draft.process} onChange={(event) => updateDraftField("equipment", event.target.value)}><option value="">설비를 선택하세요</option>{CONTEXT_OPTIONS.filter((option) => option.process === draft.process).map((option) => <option key={option.equipment}>{option.equipment}</option>)}</select></label>
+                  <label><span>작업지시</span><select value={draft.workOrder} onChange={(event) => selectWorkOrder(event.target.value)}><option value="">작업지시를 선택하세요</option>{CONTEXT_OPTIONS.map((option) => <option key={option.workOrder} value={option.workOrder}>{option.workOrder}</option>)}</select></label>
+                  <label><span>품목</span><select value={draft.product} onChange={(event) => { const option = CONTEXT_OPTIONS.find((item) => item.product === event.target.value); selectWorkOrder(option?.workOrder ?? ""); }}><option value="">품목을 선택하세요</option>{CONTEXT_OPTIONS.map((option) => <option key={option.product} value={option.product}>{option.product}</option>)}</select></label>
+                  <label><span>공정</span><select value={draft.process} onChange={(event) => { const option = CONTEXT_OPTIONS.find((item) => item.process === event.target.value); selectWorkOrder(option?.workOrder ?? ""); }}><option value="">공정을 선택하세요</option>{CONTEXT_OPTIONS.map((option) => <option key={option.process} value={option.process}>{option.process}</option>)}</select></label>
+                  <label><span>설비·라인</span><select value={draft.equipment} onChange={(event) => { const option = CONTEXT_OPTIONS.find((item) => item.equipment === event.target.value); selectWorkOrder(option?.workOrder ?? ""); }}><option value="">설비를 선택하세요</option>{CONTEXT_OPTIONS.map((option) => <option key={option.equipment} value={option.equipment}>{option.equipment}</option>)}</select></label>
                 </div>
-                <button className="wide-primary" type="button" disabled={!draft.process || !draft.equipment} onClick={() => setCaptureStage(1)}>선택하고 계속 <span>→</span></button>
+                <button className="wide-primary" type="button" disabled={!draft.workOrder || !draft.product || !draft.process || !draft.equipment} onClick={() => setCaptureStage(1)}>선택하고 계속 <span>→</span></button>
               </div>
             )}
 
             {captureStage === 1 && (
               <div className="capture-card record-card">
-                <span className="section-kicker">STEP 02 · 통합 질문 1개</span>
-                <h2>오늘 작업에서 어려웠던 점과<br />어떻게 해결했는지 말해주세요.</h2>
-                <p>공정, 설비, 작업·불량 수량, 증상, 조치를 함께 말하면 더 정확하게 정리할 수 있어요.</p>
-                <div className="ai-connection-status"><i aria-hidden="true" />실제 AI 연결 시 구조화</div>
-                <div className="privacy-notice"><b>입력 전 확인</b><span>음성은 브라우저 음성 서비스에서 처리될 수 있습니다. 전사문은 OpenAI에 <code>store:false</code>로 전송되며 이 앱은 원음 파일을 저장하지 않습니다. 저장을 누른 구조화 결과는 이 브라우저의 localStorage에 남습니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</span></div>
+                <div className="question-progress" aria-label="3문항 회고 진행 상황">
+                  {REFLECTION_QUESTIONS.map((questionItem, index) => {
+                    const answered = index === reflectionQuestionIndex
+                      ? Boolean(transcript.trim())
+                      : Boolean(reflectionAnswers[index]?.trim());
+                    return (
+                      <button
+                        type="button"
+                        key={questionItem.short}
+                        className={`${index === reflectionQuestionIndex ? "active" : ""} ${answered ? "complete" : ""}`}
+                        disabled={recording || finalizingRecording || processing || transcriptReviewRequired}
+                        onClick={() => moveToReflectionQuestion(index)}
+                        aria-current={index === reflectionQuestionIndex ? "step" : undefined}
+                      >
+                        <span>{answered && index !== reflectionQuestionIndex ? "✓" : index + 1}</span>
+                        <b>{questionItem.short.replace(/^Q\d\s/, "")}</b>
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="section-kicker">STEP 02 · 질문 {reflectionQuestionIndex + 1}/3</span>
+                <h2>{REFLECTION_QUESTIONS[reflectionQuestionIndex].title}</h2>
+                <p>{REFLECTION_QUESTIONS[reflectionQuestionIndex].helper}</p>
+                <div className="record-context-summary"><span>{draft.workOrder}</span><b>{draft.product}</b><small>{draft.process} · {draft.equipment}</small></div>
+                <div className="ai-connection-status"><i aria-hidden="true" />결과 모드: 분석 전 · LIVE AI 또는 SAMPLE로 구분</div>
+                <div className="privacy-notice"><b>입력 전 확인</b><span>상시 녹음하지 않으며 개인평가에 사용하지 않습니다. 음성은 브라우저 음성 서비스에서 처리될 수 있습니다. 전사문은 OpenAI에 <code>store:false</code>로 전송되며 이 앱은 원음 파일을 저장하지 않습니다. 저장을 누른 구조화 결과는 이 브라우저의 localStorage에 남습니다. 실제 개인정보와 기밀정보는 입력하지 마세요.</span></div>
                 <div className={`recorder ${recording ? "recording" : ""} ${finalizingRecording ? "finalizing" : ""}`}>
                   <button type="button" disabled={processing || finalizingRecording} aria-label={finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중지" : transcript.trim() ? "기존 내용에 이어 녹음" : "녹음 시작"} onClick={recording ? () => finalizeRecording("녹음을 종료했습니다. 기존 입력은 보존되며 다시 누르면 뒤에 이어집니다.") : startRecording}><i /><span>{finalizingRecording ? "마무리 중" : recording ? "멈추기" : transcript.trim() ? "이어서 말하기" : "눌러서 말하기"}</span></button>
                   <div className="recorder-wave" aria-hidden="true">
                     {[14, 30, 22, 43, 18, 36, 26, 49, 32, 17, 40, 24, 34, 16, 29, 45, 21, 33, 15].map((height, index) => <i key={index} style={{ height: recording ? `${height}px` : "4px", animationDelay: `${index * 45}ms` }} />)}
                   </div>
-                  <strong>{String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")}</strong><small>최대 03:00</small>
+                  <strong>{String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")}</strong><small>3문항 합계 최대 03:00</small>
                 </div>
                 {transcript.trim() && !recording && !finalizingRecording && <p className="transcript-append-note">추가 녹음은 현재 내용 뒤에 새 줄로 이어집니다.</p>}
-                <label className="transcript-field"><span>인식된 내용 <small>{finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중 자동 갱신" : "직접 수정할 수 있어요"}</small></span><textarea readOnly={recording || finalizingRecording} value={transcript} onChange={(event) => { setTranscript(event.target.value); setAnalysisError(""); setSpeechNotice(""); }} placeholder="음성을 인식하면 여기에 내용이 표시됩니다." /></label>
+                <label className="transcript-field"><span>Q{reflectionQuestionIndex + 1} 답변 <small>{finalizingRecording ? "마지막 음성 반영 중" : recording ? "녹음 중 자동 갱신" : `직접 수정 가능 · ${transcript.length.toLocaleString()}/${MAX_ANSWER_CHARACTERS.toLocaleString()}자`}</small></span><textarea maxLength={MAX_ANSWER_CHARACTERS} readOnly={recording || finalizingRecording} value={transcript} onChange={(event) => { setTranscript(event.target.value); setAnalysisError(""); setSpeechNotice(""); }} placeholder={REFLECTION_QUESTIONS[reflectionQuestionIndex].placeholder} /></label>
                 <div className="transcript-tools">
                   {speechNotice && <p role="status">{speechNotice}</p>}
-                  <div><button type="button" disabled={processing || finalizingRecording} onClick={() => { stopRecording(); recognitionBaseTranscriptRef.current = ""; setTranscriptReviewRequired(false); setTranscript(demoTranscript); setSpeechNotice("샘플 문장을 불러왔습니다. 실제 음성 인식 결과가 아닙니다."); }}>샘플 문장 불러오기</button>{transcript.trim() && <button className="reset-transcript" type="button" disabled={processing || finalizingRecording} onClick={clearTranscriptForRestart}>처음부터 다시</button>}</div>
+                  <div><button type="button" disabled={processing || finalizingRecording} onClick={() => { stopRecording(); recognitionBaseTranscriptRef.current = ""; setTranscriptReviewRequired(false); setTranscript(demoReflectionAnswers[reflectionQuestionIndex]); setSpeechNotice("현재 질문의 샘플 답변을 불러왔습니다. 실제 음성 인식 결과가 아닙니다."); }}>이 질문 샘플 답변</button><button type="button" disabled={processing || finalizingRecording} onClick={() => { stopRecording(); recognitionBaseTranscriptRef.current = ""; setTranscriptReviewRequired(false); setTranscript("특이사항 없음"); setSpeechNotice("이 질문을 ‘특이사항 없음’으로 기록했습니다."); }}>특이사항 없음</button>{transcript.trim() && <button className="reset-transcript" type="button" disabled={processing || finalizingRecording} onClick={clearTranscriptForRestart}>이 답변 지우기</button>}</div>
                 </div>
                 {transcriptReviewRequired && <div className="transcript-review-warning" role="alert"><p><b>마지막 문장을 확인해주세요.</b><span>음성 종료가 정상 확인되지 않아 끝부분이 누락됐을 수 있습니다.</span></p><button type="button" onClick={() => { setTranscriptReviewRequired(false); setAnalysisError(""); setSpeechNotice("전사문 확인을 완료했습니다."); }}>전사문 확인 완료</button></div>}
-                <button className="sample-flow-shortcut" type="button" disabled={processing || finalizingRecording} onClick={() => { setTranscript(demoTranscript); setSpeechNotice("AI를 사용하지 않는 샘플 흐름입니다."); continueWithSample(); }}><b>AI 없이 샘플 전체 흐름 체험</b><span>키 설정 전에도 검토·저장·승인 흐름을 바로 볼 수 있습니다. →</span></button>
+                <button className="sample-flow-shortcut" type="button" disabled={processing || finalizingRecording} onClick={() => { setSpeechNotice("AI를 사용하지 않는 3문항 샘플 흐름입니다."); continueWithSample([...demoReflectionAnswers]); }}><b>AI 없이 3문항 샘플 전체 흐름 체험</b><span>세 답변을 채우고 검토·저장·승인 단계로 바로 이동합니다. →</span></button>
                 {processing && <div className="analysis-status" role="status">AI가 현장 기록을 분석하고 있습니다. 잠시만 기다려주세요.</div>}
                 {analysisError && (
                   <div className="analysis-error" role="alert">
                     <div><b>실제 AI 구조화에 실패했습니다.</b><p>{analysisError}</p></div>
-                    <button type="button" onClick={continueWithSample}>샘플 결과로 계속</button>
+                    <button type="button" onClick={() => continueWithSample()}>샘플 결과로 계속</button>
                   </div>
                 )}
-                <div className="button-row"><button className="ghost-action" type="button" onClick={() => resetCaptureState()}>← 이전</button><button className="wide-primary inline" type="button" disabled={processing || recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={analyzeTranscript}>{finalizingRecording ? "마지막 음성 반영 중…" : transcriptReviewRequired ? "전사문 확인 필요" : processing ? "AI가 구조화하는 중…" : "AI로 내용 정리"}<span>→</span></button></div>
+                <div className="button-row">
+                  <button className="ghost-action" type="button" disabled={recording || finalizingRecording || processing} onClick={() => reflectionQuestionIndex === 0 ? returnToContextSelection() : moveToReflectionQuestion(reflectionQuestionIndex - 1)}>← {reflectionQuestionIndex === 0 ? "현장 선택" : "이전 질문"}</button>
+                  {reflectionQuestionIndex < REFLECTION_QUESTIONS.length - 1 ? (
+                    <button className="wide-primary inline" type="button" disabled={recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={() => moveToReflectionQuestion(reflectionQuestionIndex + 1)}>다음 질문 {reflectionQuestionIndex + 2}/3 <span>→</span></button>
+                  ) : (
+                    <button className="wide-primary inline" type="button" disabled={processing || recording || finalizingRecording || transcriptReviewRequired || !transcript.trim()} onClick={analyzeTranscript}>{finalizingRecording ? "마지막 음성 반영 중…" : transcriptReviewRequired ? "전사문 확인 필요" : processing ? "AI가 구조화하는 중…" : "3문항을 AI로 정리"}<span>→</span></button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -930,10 +1158,16 @@ export default function Workspace() {
                   <small>{structureMeta?.mode === "live" ? `${fieldsNeedingReview.length}개 필드 확인 필요` : "전체 필드 직접 확인"}</small>
                 </div>
                 {fieldsNeedingReview.length > 0 && <div className="review-field-list"><b>확인 대상</b>{fieldsNeedingReview.map((field) => <span key={field}>{REVIEW_FIELD_LABELS[field]}</span>)}</div>}
+                <details className="reflection-source" open>
+                  <summary>작업자 3문항 원문 다시 보기</summary>
+                  <ol>{REFLECTION_QUESTIONS.map((questionItem, index) => <li key={questionItem.short}><b>{questionItem.short}</b><p>{reflectionAnswers[index] || "특이사항 없음"}</p></li>)}</ol>
+                </details>
                 <div className="draft-form">
                   <label className={fieldsNeedingReview.includes("kind") ? "critical" : undefined}><span>기록 유형 {fieldsNeedingReview.includes("kind") && <b>확인 필요</b>}</span><select value={draft.kind} onChange={(event) => updateDraftField("kind", event.target.value as KnowledgeCard["kind"])}><option>문제</option><option>개선</option><option>노하우</option></select></label>
-                  <label className={fieldsNeedingReview.includes("process") ? "critical" : undefined}><span>공정 {fieldsNeedingReview.includes("process") && <b>확인 필요</b>}</span><input value={draft.process} onChange={(event) => updateDraftField("process", event.target.value)} /></label>
-                  <label className={fieldsNeedingReview.includes("equipment") ? "critical" : undefined}><span>설비·라인 {fieldsNeedingReview.includes("equipment") && <b>확인 필요</b>}</span><input value={draft.equipment} onChange={(event) => updateDraftField("equipment", event.target.value)} /></label>
+                  <label><span>작업지시 <b className="worker-confirmed">작업자 선택 · 고정</b></span><input readOnly value={draft.workOrder} /></label>
+                  <label><span>품목 <b className="worker-confirmed">작업자 선택 · 고정</b></span><input readOnly value={draft.product} /></label>
+                  <label className={fieldsNeedingReview.includes("process") ? "critical" : undefined}><span>공정 <b className="worker-confirmed">작업자 선택 · 고정</b></span><input readOnly value={draft.process} /></label>
+                  <label className={fieldsNeedingReview.includes("equipment") ? "critical" : undefined}><span>설비·라인 <b className="worker-confirmed">작업자 선택 · 고정</b></span><input readOnly value={draft.equipment} /></label>
                   <label className={fieldsNeedingReview.includes("quantity") ? "critical" : undefined}><span>작업 수량 {fieldsNeedingReview.includes("quantity") && <b>확인 필요</b>}</span><input value={draft.quantity} onChange={(event) => updateDraftField("quantity", event.target.value)} /></label>
                   <label className={fieldsNeedingReview.includes("defect") ? "critical" : undefined}><span>불량 수량 {fieldsNeedingReview.includes("defect") && <b>확인 필요</b>}</span><input value={draft.defect} onChange={(event) => updateDraftField("defect", event.target.value)} /></label>
                   <label className={`full ${fieldsNeedingReview.includes("symptom") ? "critical" : ""}`}><span>증상 {fieldsNeedingReview.includes("symptom") && <b>확인 필요</b>}</span><input value={draft.symptom} onChange={(event) => updateDraftField("symptom", event.target.value)} /></label>
@@ -941,7 +1175,7 @@ export default function Workspace() {
                   <label className={`full ${fieldsNeedingReview.includes("action") ? "critical" : ""}`}><span>조치 {fieldsNeedingReview.includes("action") && <b>확인 필요</b>}</span><textarea value={draft.action} onChange={(event) => updateDraftField("action", event.target.value)} /></label>
                   <label className={`full ${fieldsNeedingReview.includes("result") ? "critical" : ""}`}><span>결과 {fieldsNeedingReview.includes("result") && <b>확인 필요</b>}</span><input value={draft.result} onChange={(event) => updateDraftField("result", event.target.value)} /></label>
                 </div>
-                {missingRequiredFields.length > 0 && <p className="required-field-warning" role="alert">이 기록 유형의 필수 입력: {missingRequiredFields.map((field) => REVIEW_FIELD_LABELS[field]).join(", ")}</p>}
+                {missingRequiredFields.length > 0 && <p className="required-field-warning" role="alert">이 기록 유형의 필수 입력: {missingRequiredFields.map((field) => DRAFT_FIELD_LABELS[field]).join(", ")}</p>}
                 {numericValidationError && <p className="required-field-warning" role="alert">{numericValidationError}</p>}
                 <label className="confirm-check" htmlFor="critical-field-confirm" aria-label="구조화 초안 확인"><input id="critical-field-confirm" type="checkbox" disabled={draftHasErrors} checked={criticalConfirmed} onChange={(event) => setCriticalConfirmed(event.target.checked)} /><span><b>확인 대상과 필수값을 원문과 대조했습니다.</b><small>값을 수정하면 다시 확인해야 하며, 저장 후 관리자 검토를 거쳐 공식 지식이 됩니다.</small></span></label>
                 <div className="button-row"><button className="ghost-action" type="button" onClick={() => { setAnalysisError(""); setStructureMeta(null); setCriticalConfirmed(false); setCaptureStage(1); }}>← 다시 말하기</button><button className="wide-primary inline" type="button" disabled={!criticalConfirmed || draftHasErrors} onClick={saveDraft}>검토 요청으로 저장 <span>→</span></button></div>
@@ -951,7 +1185,8 @@ export default function Workspace() {
             {captureStage === 3 && (
               <div className="capture-card success-card">
                 <div className="success-mark">✓</div><span className="section-kicker">SAVED</span><h2>현장의 경험을 남겼습니다.</h2><p>관리자가 확인하면 모두가 검색할 수 있는 현장 지식이 됩니다.</p>
-                <div className="saved-summary"><span className={`kind-mark ${draft.kind}`}>{draft.kind}</span><div><b>{draft.process} — {draftTitleDetail}</b><small>{draft.equipment} · 방금 전</small></div><span className="status-chip 검토-대기">검토 대기</span></div>
+                <div className={`saved-mode ${structureMeta?.mode === "live" ? "live" : "sample"}`}>{structureMeta?.mode === "live" ? `LIVE AI · 신뢰도 ${structureMeta.confidence}%` : "SAMPLE · AI 미사용"}</div>
+                <div className="saved-summary"><span className={`kind-mark ${draft.kind}`}>{draft.kind}</span><div><b>{draft.process} — {draftTitleDetail}</b><small>{draft.workOrder} · {draft.product}<br />{draft.equipment} · 방금 전</small></div><span className="status-chip 검토-대기">검토 대기</span></div>
                 <div className="success-actions"><button className="wide-primary" type="button" onClick={() => resetCaptureState()}>하나 더 기록하기 <span>+</span></button><button className="ghost-action" type="button" onClick={() => changeView("dashboard")}>오늘의 현장으로</button></div>
               </div>
             )}
@@ -967,14 +1202,14 @@ export default function Workspace() {
                 {pendingCards.length === 0 && <div className="empty-state">모든 검토를 마쳤습니다.</div>}
                 {pendingCards.map((card) => (
                   <button type="button" className={`queue-item ${selectedCardId === card.id ? "active" : ""}`} key={card.id} onClick={() => setSelectedCardId(card.id)}>
-                    <div><span className={`kind-mark ${card.kind}`}>{card.kind}</span><small>#{card.id}</small></div><b>{card.title}</b><p>{card.process} · {card.author}</p><footer><span>{card.structureMode === "live" ? `AI 신뢰도 ${card.confidence}%` : "샘플 결과 · AI 미사용"}</span><span>{card.createdAt}</span></footer>
+                    <div><span className={`kind-mark ${card.kind}`}>{card.kind}</span><small>#{card.id}</small></div><b>{card.title}</b><p>{card.workOrder} · {card.product}<br />{card.process} · {card.author}</p><footer><span>{card.structureMode === "live" ? `LIVE AI · 신뢰도 ${card.confidence}%` : "SAMPLE · AI 미사용"}</span><span>{card.createdAt}</span></footer>
                   </button>
                 ))}
               </div>
               {selectedCard && (
                 <article className="review-detail">
-                  <header><div><span className={`kind-mark ${selectedCard.kind}`}>{selectedCard.kind}</span><span>#{selectedCard.id}</span></div><h2>{selectedCard.title}</h2><p>{selectedCard.equipment} · {selectedCard.author} · {selectedCard.createdAt}</p></header>
-                  <div className="source-block"><span>구조화된 기록 요약</span><blockquote>“{selectedCard.symptom}이 있었고, 확인해 보니 {selectedCard.cause}이었습니다. {selectedCard.action}했고 {selectedCard.result}.”</blockquote><small>{selectedCard.structureMode === "live" ? "LIVE AI 구조화" : "SAMPLE · AI 미사용"} · 브라우저에 저장된 결과 · 원음 파일은 앱에 저장하지 않음</small></div>
+                  <header><div><span className={`kind-mark ${selectedCard.kind}`}>{selectedCard.kind}</span><span>#{selectedCard.id}</span></div><h2>{selectedCard.title}</h2><p>{selectedCard.workOrder} · {selectedCard.product}<br />{selectedCard.equipment} · {selectedCard.author} · {selectedCard.createdAt}</p></header>
+                  <div className="source-block"><span>작업자 3문항 원문</span><ol>{REFLECTION_QUESTIONS.map((questionItem, index) => <li key={questionItem.short}><b>{questionItem.short}</b><p>{selectedCard.sourceAnswers[index] || "특이사항 없음"}</p></li>)}</ol><small>{selectedCard.structureMode === "live" ? "LIVE AI 구조화" : "SAMPLE · AI 미사용"} · 브라우저에 저장된 결과 · 원음 파일은 앱에 저장하지 않음</small></div>
                   <dl className="knowledge-fields">
                     <div><dt>상황·증상</dt><dd>{selectedCard.symptom}</dd></div><div><dt>원인 가설</dt><dd>{selectedCard.cause}<small>관리자 확인 필요</small></dd></div><div><dt>실행한 조치</dt><dd>{selectedCard.action}</dd></div><div><dt>확인된 결과</dt><dd>{selectedCard.result}</dd></div>
                   </dl>
@@ -992,18 +1227,18 @@ export default function Workspace() {
 
         {view === "knowledge" && (
           <section className="workspace-view knowledge-view">
-            <div className="view-heading"><div><p>APPROVED KNOWLEDGE ONLY</p><h1>현장 지식 검색</h1></div><div className="knowledge-stat"><strong>{approvedCards.length + 27}</strong><span>검증된 지식</span></div></div>
-            <div className="coach-box"><span className="coach-mark">T.</span><div><b>현장 지식에게 물어보세요</b><p>승인된 우리 공장 기록에서만 답하고, 근거가 없으면 모른다고 말합니다.</p><div><input value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => event.key === "Enter" && askKnowledge()} placeholder="예: CNC-03 진동이 커지면 무엇부터 확인하지?" /><button type="button" onClick={askKnowledge}>질문하기 →</button></div></div></div>
+            <div className="view-heading"><div><p>APPROVED KNOWLEDGE ONLY · DEMO ENVIRONMENT</p><h1>현장 지식 검색</h1></div><div className="knowledge-stat"><strong>{approvedCards.length + 27}</strong><span>DEMO KPI · 검증된 지식</span></div></div>
+            <div className="coach-box"><span className="coach-mark">T.</span><div><b>현장 지식에게 물어보세요 <span className="mode-chip sample">RULE DEMO · RAG 아님</span></b><p>이 프로토타입은 승인된 샘플 카드에 대한 규칙 기반 답변만 보여주며, 근거가 없으면 모른다고 답합니다.</p><div><input value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => event.key === "Enter" && askKnowledge()} placeholder="예: CNC-03 진동이 커지면 무엇부터 확인하지?" /><button type="button" onClick={askKnowledge}>질문하기 →</button></div></div></div>
             {answer && <div className="coach-answer"><span>TAID 답변</span><p>{answer}</p>{answer.includes("승인 사례") && <button type="button" onClick={() => setSelectedCardId(1038)}>근거 · #1038 CNC-03 진동 증가 시 척 체결 순서 ↗</button>}</div>}
             <div className="knowledge-toolbar"><div className="search-field"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="증상, 설비, 공정, 원인으로 검색" /></div><button type="button" onClick={() => setToast("공정 필터는 다음 MVP 범위입니다.")}>전체 공정⌄</button><button type="button" onClick={() => setToast("유형 필터는 다음 MVP 범위입니다.")}>전체 유형⌄</button></div>
             <div className="knowledge-layout">
               <div className="knowledge-list">
                 {filteredCards.map((card) => (
-                  <button type="button" className={`knowledge-list-item ${selectedCardId === card.id ? "active" : ""}`} key={card.id} onClick={() => setSelectedCardId(card.id)}><span className={`kind-mark ${card.kind}`}>{card.kind}</span><div><b>{card.title}</b><p>{card.process} · {card.equipment} <span className={`mode-chip ${card.structureMode === "live" ? "live" : "sample"}`}>{card.structureMode === "live" ? "LIVE AI" : "SAMPLE"}</span></p></div><small>조회 {card.views}</small><span>→</span></button>
+                  <button type="button" className={`knowledge-list-item ${selectedCardId === card.id ? "active" : ""}`} key={card.id} onClick={() => setSelectedCardId(card.id)}><span className={`kind-mark ${card.kind}`}>{card.kind}</span><div><b>{card.title}</b><p>{card.workOrder} · {card.product}<br />{card.process} · {card.equipment} <span className={`mode-chip ${card.structureMode === "live" ? "live" : "sample"}`}>{card.structureMode === "live" ? "LIVE AI" : "SAMPLE"}</span></p></div><small>조회 {card.views}</small><span>→</span></button>
                 ))}
                 {filteredCards.length === 0 && <div className="empty-state">일치하는 승인 지식이 없습니다.</div>}
               </div>
-              {selectedCard && selectedCard.status === "승인" && <article className="knowledge-preview"><span className={`kind-mark ${selectedCard.kind}`}>{selectedCard.kind}</span><small>승인 지식 #{selectedCard.id} · {selectedCard.structureMode === "live" ? "LIVE AI" : "SAMPLE"}</small><h2>{selectedCard.title}</h2><dl><div><dt>증상</dt><dd>{selectedCard.symptom}</dd></div><div><dt>확인된 원인</dt><dd>{selectedCard.cause}</dd></div><div><dt>해결 방법</dt><dd>{selectedCard.action}</dd></div><div><dt>검증 결과</dt><dd>{selectedCard.result}</dd></div></dl><footer><span>작성 {selectedCard.author}</span><span>현장 책임자 승인</span></footer></article>}
+              {selectedCard && selectedCard.status === "승인" && <article className="knowledge-preview"><span className={`kind-mark ${selectedCard.kind}`}>{selectedCard.kind}</span><small>승인 지식 #{selectedCard.id} · {selectedCard.structureMode === "live" ? "LIVE AI" : "SAMPLE"}</small><h2>{selectedCard.title}</h2><p className="knowledge-context">{selectedCard.workOrder} · {selectedCard.product}<br />{selectedCard.process} · {selectedCard.equipment}</p><dl><div><dt>증상</dt><dd>{selectedCard.symptom}</dd></div><div><dt>확인된 원인</dt><dd>{selectedCard.cause}</dd></div><div><dt>해결 방법</dt><dd>{selectedCard.action}</dd></div><div><dt>검증 결과</dt><dd>{selectedCard.result}</dd></div></dl><footer><span>작성 {selectedCard.author}</span><span>현장 책임자 승인</span></footer></article>}
             </div>
           </section>
         )}

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const MAX_API_BODY_BYTES = 32_000;
@@ -68,6 +69,24 @@ test("server-renders the interactive MVP workspace", async () => {
   assert.match(html, /INTERACTIVE MVP · DEMO ENVIRONMENT/);
   assert.match(html, /MVP · DEMO/);
   assert.match(html, /설비 QR 데모/);
+  assert.match(html, /작업지시·품목·공정·설비/);
+  assert.match(html, />작업지시</);
+  assert.match(html, />품목</);
+  assert.doesNotMatch(html, /LIVE AI 구조화|RULE DEMO/);
+});
+
+test("keeps explicit three-question and demo mode labels in conditional workspace views", async () => {
+  const source = await readFile(
+    new URL("../app/app/Workspace.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /aria-label="3문항 회고 진행 상황"/);
+  assert.match(source, /AI 없이 3문항 샘플 전체 흐름 체험/);
+  assert.match(source, /작업자 3문항 원문/);
+  assert.match(source, /LIVE AI/);
+  assert.match(source, /SAMPLE · AI 미사용/);
+  assert.match(source, /RULE DEMO · RAG 아님/);
 });
 
 test("allows only POST for structure requests", async () => {
